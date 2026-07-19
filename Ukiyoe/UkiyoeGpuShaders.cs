@@ -252,14 +252,54 @@ internal readonly partial struct EtfShader(
 
         var index = gy * gridWidth + gx;
         var center = tangentIn[index];
-        if (center.X == 0f && center.Y == 0f)
+        var maxGradient = Hlsl.Max(Hlsl.AsFloat(scratch[UkiyoeSettings.ScratchMaxGradient]), 1e-6f);
+        var centerMagnitude = gradientMagnitude[index] / maxGradient;
+        if (centerMagnitude < UkiyoeSettings.EtfMagnitudeFloor)
         {
-            tangentOut[index] = center;
+            var tensorXX = 0f;
+            var tensorXY = 0f;
+            var tensorYY = 0f;
+            for (var dy = -UkiyoeSettings.EtfRadius; dy <= UkiyoeSettings.EtfRadius; dy++)
+            {
+                for (var dx = -UkiyoeSettings.EtfRadius; dx <= UkiyoeSettings.EtfRadius; dx++)
+                {
+                    if (dx * dx + dy * dy > UkiyoeSettings.EtfRadius * UkiyoeSettings.EtfRadius)
+                        continue;
+                    var nx = gx + dx;
+                    var ny = gy + dy;
+                    if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                        continue;
+                    var neighborIndex = ny * gridWidth + nx;
+                    var neighborMagnitude = gradientMagnitude[neighborIndex] / maxGradient;
+                    if (neighborMagnitude < UkiyoeSettings.EtfMagnitudeFloor)
+                        continue;
+                    var neighbor = tangentIn[neighborIndex];
+                    var magnitudeWeight = 0.5f * (1f + Hlsl.Tanh(UkiyoeSettings.EtfFalloff * (neighborMagnitude - centerMagnitude)));
+                    tensorXX += magnitudeWeight * neighbor.X * neighbor.X;
+                    tensorXY += magnitudeWeight * neighbor.X * neighbor.Y;
+                    tensorYY += magnitudeWeight * neighbor.Y * neighbor.Y;
+                }
+            }
+            if (tensorXX + tensorYY < 1e-9f)
+            {
+                tangentOut[index] = new Float2(0f, 0f);
+                return;
+            }
+            var trace = tensorXX + tensorYY;
+            var determinant = tensorXX * tensorYY - tensorXY * tensorXY;
+            var eigenvalue = 0.5f * trace + Hlsl.Sqrt(Hlsl.Max(0.25f * trace * trace - determinant, 0f));
+            var eigenX = eigenvalue - tensorYY;
+            var eigenY = tensorXY;
+            if (Hlsl.Abs(eigenX) + Hlsl.Abs(eigenY) < 1e-12f)
+            {
+                eigenX = tensorXY;
+                eigenY = eigenvalue - tensorXX;
+            }
+            var eigenLength = Hlsl.Sqrt(eigenX * eigenX + eigenY * eigenY);
+            tangentOut[index] = eigenLength > 1e-9f ? new Float2(eigenX / eigenLength, eigenY / eigenLength) : new Float2(1f, 0f);
             return;
         }
 
-        var maxGradient = Hlsl.Max(Hlsl.AsFloat(scratch[UkiyoeSettings.ScratchMaxGradient]), 1e-6f);
-        var centerMagnitude = gradientMagnitude[index] / maxGradient;
         var sum = new Float2(0f, 0f);
         for (var dy = -UkiyoeSettings.EtfRadius; dy <= UkiyoeSettings.EtfRadius; dy++)
         {
@@ -444,7 +484,7 @@ internal readonly partial struct DogShader(
         }
         for (var t = -extent; t <= extent; t++)
         {
-            var value = SampleGray(gx + 0.5f + direction.X * t, gy + 0.5f + direction.Y * t);
+            var value = SampleGray(gx + direction.X * t, gy + direction.Y * t);
             var weightCenter = Hlsl.Exp(-t * t * invCenter) / centerNorm;
             var weightSurround = Hlsl.Exp(-t * t * invSurround) / surroundNorm;
             sum += value * (weightCenter - UkiyoeSettings.DogSharpness * weightSurround);
@@ -489,8 +529,8 @@ internal readonly partial struct FlowAccumulateShader(
 
     private Float2 SampleTangent(float x, float y)
     {
-        var ix = Hlsl.Clamp((int)x, 0, gridWidth - 1);
-        var iy = Hlsl.Clamp((int)y, 0, gridHeight - 1);
+        var ix = Hlsl.Clamp((int)Hlsl.Round(x), 0, gridWidth - 1);
+        var iy = Hlsl.Clamp((int)Hlsl.Round(y), 0, gridHeight - 1);
         return tangent[iy * gridWidth + ix];
     }
 
@@ -508,7 +548,7 @@ internal readonly partial struct FlowAccumulateShader(
         for (var side = 0; side < 2; side++)
         {
             var sign = side == 0 ? 1f : -1f;
-            var position = new Float2(gx + 0.5f, gy + 0.5f);
+            var position = new Float2(gx, gy);
             var previous = SampleTangent(position.X, position.Y) * sign;
             if (previous.X == 0f && previous.Y == 0f)
                 continue;
@@ -680,12 +720,9 @@ internal readonly partial struct RenderShader(
         }
 
         var quantizedDarkness = UkiyoeShaderMath.SoftQuantize(chosenDarkness, paletteLevels);
-        var chromaLevels = Hlsl.Max((paletteLevels + 1) / 2, 2);
         var luma = 0.299f * chosen.X + 0.587f * chosen.Y + 0.114f * chosen.Z;
-        var cb = (chosen.Z - luma) * 0.564f + 0.5f;
-        var cr = (chosen.X - luma) * 0.713f + 0.5f;
-        cb = 0.5f + (UkiyoeShaderMath.SoftQuantize(cb, chromaLevels) - 0.5f) * UkiyoeSettings.ChromaScale;
-        cr = 0.5f + (UkiyoeShaderMath.SoftQuantize(cr, chromaLevels) - 0.5f) * UkiyoeSettings.ChromaScale;
+        var cb = 0.5f + ((chosen.Z - luma) * 0.564f) * UkiyoeSettings.ChromaScale;
+        var cr = 0.5f + ((chosen.X - luma) * 0.713f) * UkiyoeSettings.ChromaScale;
 
         var ring = UkiyoeShaderMath.BarenRing(px, py, seed);
         var midtone = 4f * quantizedDarkness * (1f - quantizedDarkness);
@@ -768,9 +805,14 @@ internal static class UkiyoeShaderMath
 
     public static float SoftQuantize(float value, int levels)
     {
-        var step = 1f / levels;
-        var nearest = (Hlsl.Floor(Hlsl.Clamp(value, 0f, 0.9999f) / step) + 0.5f) * step;
-        return Hlsl.Saturate(nearest + step * 0.5f * Hlsl.Tanh(UkiyoeSettings.QuantizeSharpness * levels * (value - nearest)));
+        var scaled = Hlsl.Clamp(value, 0f, 0.9999f) * levels;
+        var bin = Hlsl.Floor(scaled);
+        var fraction = scaled - bin;
+        var width = UkiyoeSettings.QuantizeEdgeWidth;
+        var rise = Hlsl.SmoothStep(1f - width, 1f, fraction);
+        var fall = Hlsl.SmoothStep(0f, width, fraction);
+        var transition = 0.5f * (rise - (1f - fall));
+        return Hlsl.Saturate((bin + 0.5f + transition) / levels);
     }
 
     public static Float2 LayerOffset(int level, int seed)
@@ -791,6 +833,8 @@ internal static class UkiyoeShaderMath
         var dy = py - centerY;
         var distance = Hlsl.Sqrt(dx * dx + dy * dy);
         var phase = LatticeHash(cellX, cellY, (uint)seed, 0x85EBCA6Bu) * 6.2831853f;
-        return 0.5f + 0.5f * Hlsl.Cos(distance * UkiyoeSettings.BarenRingFrequency + phase);
+        var ring = 0.5f + 0.5f * Hlsl.Cos(distance * UkiyoeSettings.BarenRingFrequency + phase);
+        var patch = ValueNoise(px / UkiyoeSettings.BarenCellSize * 1.7f, py / UkiyoeSettings.BarenCellSize * 1.7f, (uint)seed, 0x51ED270Bu);
+        return ring * Hlsl.SmoothStep(0.35f, 0.75f, patch);
     }
 }
