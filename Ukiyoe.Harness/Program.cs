@@ -46,12 +46,17 @@ foreach (var quality in new[] { UkiyoeQuality.Balanced, UkiyoeQuality.High, Ukiy
     var parameters = new UkiyoePipeline.Parameters(quality, 0.5f, 0.5f, 0.5f, 0.6f, 6, 0.3f, 0.4f, 0.5f, 0.85f, 0.12f, 0.1f, 0.09f, 0);
     pipeline.Process(source, destination, width, height, in parameters);
     pipeline.Process(source, destination, width, height, in parameters);
-    var stopwatch = Stopwatch.StartNew();
-    const int frames = 5;
+    var best = double.MaxValue;
+    const int frames = 10;
+    var stopwatch = new Stopwatch();
     for (var frame = 0; frame < frames; frame++)
+    {
+        stopwatch.Restart();
         pipeline.Process(source, destination, width, height, in parameters);
-    stopwatch.Stop();
-    Console.WriteLine($"{quality}: {stopwatch.Elapsed.TotalMilliseconds / frames:F2} ms/frame ({width}x{height}) litPixels={CountLit(destination)}");
+        stopwatch.Stop();
+        best = Math.Min(best, stopwatch.Elapsed.TotalMilliseconds);
+    }
+    Console.WriteLine($"{quality}: {best:F2} ms/frame ({width}x{height}) litPixels={CountLit(destination)}");
 }
 
 {
@@ -64,11 +69,18 @@ foreach (var quality in new[] { UkiyoeQuality.Balanced, UkiyoeQuality.High, Ukiy
     var parameters = new UkiyoePipeline.Parameters(UkiyoeQuality.High, 0.5f, 0.5f, 0.5f, 0.6f, 6, 0.3f, 0.4f, 0.5f, 0.85f, 0.12f, 0.1f, 0.09f, 0);
 
     pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, in parameters);
-    var stopwatch = Stopwatch.StartNew();
-    pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, parameters with { Flatten = 0.7f });
-    pipeline.WaitForCompletion();
-    stopwatch.Stop();
-    Console.WriteLine($"structure recompute: {stopwatch.Elapsed.TotalMilliseconds:F2} ms");
+    var stopwatch = new Stopwatch();
+    var structureBest = double.MaxValue;
+    for (var round = 0; round < 12; round++)
+    {
+        var recompute = parameters with { Flatten = (round & 1) == 0 ? 0.7f : 0.6f };
+        stopwatch.Restart();
+        pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, in recompute);
+        pipeline.WaitForCompletion();
+        stopwatch.Stop();
+        structureBest = Math.Min(structureBest, stopwatch.Elapsed.TotalMilliseconds);
+    }
+    Console.WriteLine($"structure recompute: {structureBest:F2} ms");
 
     if (pipeline.TryGetVisibleBounds(width, height, in parameters, out var rect))
     {
