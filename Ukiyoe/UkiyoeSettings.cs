@@ -7,7 +7,7 @@ internal static class UkiyoeSettings
     public const float MinimumLineSigmaPixels = 0.6f;
     public const float SurroundSigmaScale = 1.6f;
     public const float DogSharpness = 0.99f;
-    public const float LineGain = 24f;
+    public const float LineGain = 40f;
     public const float MinimumLineThreshold = 0.1f;
     public const float LineThresholdRange = 0.85f;
     public const float LineSoftness = 0.1f;
