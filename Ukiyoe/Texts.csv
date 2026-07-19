@@ -1,0 +1,42 @@
+Key,Parameter,ja-jp,en-us,zh-cn,zh-tw,ko-kr,es-es,ar-sa,id-id
+Ukiyoe,,浮世絵,Ukiyo-e,浮世绘,浮世繪,우키요에,Ukiyo-e,أوكييو-إه,Ukiyo-e
+BasicGroup,,基本,Basic,基本,基本,기본,Básico,أساسي,Dasar
+LineGroup,,主線,Line,主线,主線,주선,Línea,الخط,Garis
+ColorGroup,,色面,Color,色面,色面,색면,Color,اللون,Warna
+CraftGroup,,意匠,Craft,工艺,工藝,의장,Artesanía,الحرفة,Kerajinan
+Amount,,強さ,Amount,强度,強度,강도,Intensidad,الشدة,Intensitas
+AmountDescription,,浮世絵調の合成量です,Blend amount of the woodblock print over the source,浮世绘风格与源图像的混合量,浮世繪風格與源圖像的混合量,우키요에 스타일의 합성량입니다,Cantidad de mezcla del estilo de grabado sobre la imagen,مقدار مزج أسلوب الطباعة الخشبية فوق الصورة,Jumlah pencampuran gaya cetak kayu di atas citra
+Quality,,品質,Quality,品质,品質,품질,Calidad,الجودة,Kualitas
+QualityDescription,,処理格子の解像度と反復回数を選びます,Selects the processing grid resolution and iteration counts,选择处理网格分辨率与迭代次数,選擇處理網格解析度與迭代次數,처리 격자 해상도와 반복 횟수를 선택합니다,Selecciona la resolución de la retícula de proceso y el número de iteraciones,يحدد دقة شبكة المعالجة وعدد التكرارات,Memilih resolusi kisi pemrosesan dan jumlah iterasi
+LineWidth,,線の太さ,Line width,线条粗细,線條粗細,선 굵기,Grosor de línea,سمك الخط,Ketebalan garis
+LineWidthDescription,,主線の太さです。輪郭検出の中心ガウスの幅を決めます,Thickness of the key-block lines. Sets the center Gaussian width of the edge detection,主线的粗细。决定轮廓检测中心高斯的宽度,主線的粗細。決定輪廓檢測中心高斯的寬度,주선의 굵기입니다. 윤곽 검출 중심 가우스의 폭을 정합니다,Grosor de las líneas principales. Define el ancho de la gaussiana central de la detección de bordes,سمك الخطوط الرئيسية. يحدد عرض الغاوسية المركزية لاكتشاف الحواف,Ketebalan garis utama. Menentukan lebar Gaussian pusat deteksi tepi
+Coherence,,線の流れ,Coherence,线条连贯,線條連貫,선 흐름,Coherencia,تماسك الخط,Koherensi
+CoherenceDescription,,エッジ接線流に沿って応答を集める長さです。高いほど線がつながります,Length of accumulation along the edge tangent flow. Higher values connect the lines,沿边缘切线流累积响应的长度。数值越高线条越连贯,沿邊緣切線流累積響應的長度。數值越高線條越連貫,에지 접선류를 따라 응답을 모으는 길이입니다. 높을수록 선이 이어집니다,Longitud de acumulación a lo largo del flujo tangente de bordes. Valores altos conectan las líneas,طول التجميع على طول تدفق مماس الحواف. القيم الأعلى تصل الخطوط,Panjang akumulasi di sepanjang aliran tangen tepi. Nilai tinggi menyambungkan garis
+LineDetail,,線の量,Line detail,线条数量,線條數量,선의 양,Detalle de línea,كمية الخطوط,Detail garis
+LineDetailDescription,,二値化のしきい値です。高いほど弱いエッジも主線になります,Binarization threshold. Higher values turn weaker edges into lines,二值化阈值。数值越高越弱的边缘也会成为主线,二值化閾值。數值越高越弱的邊緣也會成為主線,이진화 임계값입니다. 높을수록 약한 에지도 주선이 됩니다,Umbral de binarización. Valores altos convierten bordes débiles en líneas,عتبة الثنائية. القيم الأعلى تحول الحواف الضعيفة إلى خطوط,Ambang binarisasi. Nilai tinggi mengubah tepi lemah menjadi garis
+LineStrength,,線の濃さ,Line strength,线条浓度,線條濃度,선 농도,Opacidad de línea,كثافة الخط,Kepekatan garis
+LineStrengthDescription,,主線を重ねる濃さです,Opacity of the key-block lines,主线叠加的浓度,主線疊加的濃度,주선을 겹치는 농도입니다,Opacidad con la que se superponen las líneas principales,كثافة تراكب الخطوط الرئيسية,Kepekatan penumpukan garis utama
+LineColor,,主線色,Line color,主线色,主線色,주선 색,Color de línea,لون الخط,Warna garis
+LineColorDescription,,主線の色です,Color of the key-block lines,主线的颜色,主線的顏色,주선의 색입니다,Color de las líneas principales,لون الخطوط الرئيسية,Warna garis utama
+Flatten,,平坦化,Flatten,平坦化,平坦化,평탄화,Aplanado,التسطيح,Perataan
+FlattenDescription,,L1平坦化の強さです。高いほど色面が大きく均されます,Strength of the L1 flattening. Higher values level the color regions,L1平坦化的强度。数值越高色面越均匀,L1平坦化的強度。數值越高色面越均勻,L1 평탄화의 강도입니다. 높을수록 색면이 크게 고르게 됩니다,Intensidad del aplanado L1. Valores altos igualan las regiones de color,قوة التسطيح L1. القيم الأعلى تسوي مساحات اللون,Kekuatan perataan L1. Nilai tinggi meratakan bidang warna
+PaletteLevels,,色数,Palette,色数,色數,색 수,Paleta,عدد الألوان,Palet
+PaletteLevelsDescription,,限定パレットの階調数です,Number of tone levels in the limited palette,限定调色板的色调数,限定調色盤的色調數,한정 팔레트의 계조 수입니다,Número de niveles tonales de la paleta limitada,عدد درجات اللوحة المحدودة,Jumlah tingkat nada pada palet terbatas
+Misregistration,,版ずれ,Misregistration,套版偏移,套版偏移,판 어긋남,Desregistro,انزياح الطبع,Geser cetak
+MisregistrationDescription,,色版の刷りずれの大きさです。階調ごとに版が少しずつずれます,Amount of color block misregistration. Each tone layer shifts slightly,色版套印偏移的大小。每个色调层都会略微偏移,色版套印偏移的大小。每個色調層都會略微偏移,색판 인쇄 어긋남의 크기입니다. 계조마다 판이 조금씩 어긋납니다,Cantidad de desregistro de las planchas de color. Cada capa tonal se desplaza ligeramente,مقدار انزياح ألواح الألوان. تنزاح كل طبقة درجة قليلاً,Besarnya geser cetak blok warna. Setiap lapisan nada bergeser sedikit
+Baren,,ばれん目,Baren,马连痕,馬連痕,바렌 자국,Baren,أثر البارن,Jejak baren
+BarenDescription,,ばれんの擦り跡の強さです。色面に同心円状のむらが出ます,Strength of the baren rubbing marks. Concentric unevenness appears in the color regions,马连摩擦痕迹的强度。色面出现同心圆状的不均,馬連摩擦痕跡的強度。色面出現同心圓狀的不均,바렌 문지름 자국의 강도입니다. 색면에 동심원 모양의 얼룩이 생깁니다,Intensidad de las marcas del baren. Aparecen irregularidades concéntricas en las regiones de color,قوة آثار فرك البارن. يظهر تفاوت دائري متحد المركز في مساحات اللون,Kekuatan jejak gosokan baren. Muncul ketidakrataan konsentris pada bidang warna
+Paper,,和紙,Paper,和纸,和紙,화지,Papel,الورق,Kertas
+PaperDescription,,和紙の繊維によるかすれの強さです,Strength of the washi fiber grain,和纸纤维带来的飞白强度,和紙纖維帶來的飛白強度,화지 섬유에 의한 갈필의 강도입니다,Intensidad del grano de las fibras del papel washi,قوة تحبب ألياف ورق الواشي,Kekuatan guratan serat kertas washi
+Seed,,シード,Seed,种子,種子,시드,Semilla,البذرة,Seed
+SeedDescription,,和紙の繊維とばれん目と版ずれの形を決める固定値です,A fixed value that determines the paper fibers and the baren marks and the misregistration,决定和纸纤维、马连痕与套版偏移形状的固定值,決定和紙纖維、馬連痕與套版偏移形狀的固定值,화지 섬유와 바렌 자국과 판 어긋남의 형태를 결정하는 고정값입니다,Valor fijo que determina las fibras del papel y las marcas del baren y el desregistro,قيمة ثابتة تحدد ألياف الورق وآثار البارن وانزياح الطبع,Nilai tetap yang menentukan serat kertas dan jejak baren dan geser cetak
+QualityBalanced,,標準,Balanced,标准,標準,표준,Estándar,قياسي,Standar
+QualityBalancedDescription,,格子解像度と反復回数を抑えた設定です,Uses reduced grid resolution and iteration counts,降低网格分辨率与迭代次数的设置,降低網格解析度與迭代次數的設定,격자 해상도와 반복 횟수를 줄인 설정입니다,Configuración con resolución de retícula e iteraciones reducidas,إعداد بدقة شبكة وعدد تكرارات مخفضين,Pengaturan dengan resolusi kisi dan iterasi yang dikurangi
+QualityHigh,,高品質,High,高品质,高品質,고품질,Alta,عالية,Tinggi
+QualityHighDescription,,品質と処理量の基準設定です,The reference balance of quality and cost,品质与处理量的基准设置,品質與處理量的基準設定,품질과 처리량의 기준 설정입니다,Configuración de referencia entre calidad y coste,الإعداد المرجعي للتوازن بين الجودة والتكلفة,Pengaturan acuan antara kualitas dan beban proses
+QualityUltra,,最高品質,Ultra,最高品质,最高品質,최고 품질,Máxima,قصوى,Ultra
+QualityUltraDescription,,最大の格子解像度と反復回数を使用します,Uses the largest grid resolution and iteration counts,使用最大的网格分辨率与迭代次数,使用最大的網格解析度與迭代次數,최대 격자 해상도와 반복 횟수를 사용합니다,Usa la mayor resolución de retícula y el mayor número de iteraciones,يستخدم أكبر دقة شبكة وأكبر عدد من التكرارات,Menggunakan resolusi kisi dan jumlah iterasi terbesar
+TagWoodblock,,木版画,Woodblock,木版画,木版畫,목판화,Xilografía,طباعة خشبية,Cetak kayu
+TagPrint,,版画,Print,版画,版畫,판화,Grabado,طباعة,Cetakan
+TagJapanese,,和風,Japanese style,和风,和風,일본풍,Estilo japonés,النمط الياباني,Gaya Jepang
+UpdateAvailableMessage,,新しいバージョン {0} が公開されています。,A new version {0} is available.,新版本 {0} 已发布。,新版本 {0} 已發布。,새 버전 {0}이(가) 공개되었습니다.,La nueva versión {0} ya está disponible.,تم إصدار نسخة جديدة {0}.,Versi baru {0} telah dirilis.
