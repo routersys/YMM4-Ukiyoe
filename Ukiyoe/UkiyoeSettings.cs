@@ -23,6 +23,9 @@ internal static class UkiyoeSettings
     public const float FlattenLumaScale = 0.3f;
     public const float FlattenGradientWeight = 0.4f;
     public const int FlattenRadius = 2;
+    public const int FlattenGroupDim = 8;
+    public const int FlattenTileDim = FlattenGroupDim + 2 * FlattenRadius;
+    public const int FlattenTileCount = FlattenTileDim * FlattenTileDim;
     public const float QuantizeEdgeWidth = 0.18f;
     public const float ChromaScale = 0.9f;
     public const float MaximumShiftPixels = 10f;

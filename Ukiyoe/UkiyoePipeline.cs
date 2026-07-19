@@ -243,11 +243,13 @@ internal sealed class UkiyoePipeline : IDisposable
 
         context.For(gridWidth, gridHeight, new CopyColorShader(_colorIn!, _colorA!, gridWidth, gridHeight));
         context.Barrier(_colorA!);
+        var flattenDispatchWidth = (gridWidth + UkiyoeSettings.FlattenGroupDim - 1) & ~(UkiyoeSettings.FlattenGroupDim - 1);
+        var flattenDispatchHeight = (gridHeight + UkiyoeSettings.FlattenGroupDim - 1) & ~(UkiyoeSettings.FlattenGroupDim - 1);
         var iterateIn = _colorA!;
         var iterateOut = _colorB!;
         for (var iteration = 0; iteration < derived.FlattenIterations; iteration++)
         {
-            context.For(gridWidth, gridHeight, new FlattenShader(
+            context.For(flattenDispatchWidth, flattenDispatchHeight, new FlattenShader(
                 _colorIn!, iterateIn, iterateOut, _gradientMagnitude!, _scratch, gridWidth, gridHeight, derived.FlattenBeta));
             context.Barrier(iterateOut);
             (iterateIn, iterateOut) = (iterateOut, iterateIn);

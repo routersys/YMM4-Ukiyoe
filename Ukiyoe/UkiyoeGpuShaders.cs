@@ -326,7 +326,7 @@ internal readonly partial struct EtfShader(
     }
 }
 
-[ThreadGroupSize(DefaultThreadGroupSizes.XY)]
+[ThreadGroupSize(8, 8, 1)]
 [GeneratedComputeShaderDescriptor]
 internal readonly partial struct FlattenShader(
     ReadWriteBuffer<Float4> colorIn,
@@ -347,19 +347,50 @@ internal readonly partial struct FlattenShader(
     private readonly int gridHeight = gridHeight;
     private readonly float beta = beta;
 
+    [GroupShared(144)]
+    private static readonly Float4[] tileColor = null!;
+
+    [GroupShared(144)]
+    private static readonly float[] tileGradient = null!;
+
+    [GroupShared(144)]
+    private static readonly Float4[] tileIterate = null!;
+
     public void Execute()
     {
+        var originX = GridIds.X * UkiyoeSettings.FlattenGroupDim - UkiyoeSettings.FlattenRadius;
+        var originY = GridIds.Y * UkiyoeSettings.FlattenGroupDim - UkiyoeSettings.FlattenRadius;
+        for (var slot = GroupIds.Index; slot < UkiyoeSettings.FlattenTileCount; slot += UkiyoeSettings.FlattenGroupDim * UkiyoeSettings.FlattenGroupDim)
+        {
+            var tx = originX + slot % UkiyoeSettings.FlattenTileDim;
+            var ty = originY + slot / UkiyoeSettings.FlattenTileDim;
+            if (tx >= 0 && tx < gridWidth && ty >= 0 && ty < gridHeight)
+            {
+                var sampleIndex = ty * gridWidth + tx;
+                tileColor[slot] = colorIn[sampleIndex];
+                tileGradient[slot] = gradientMagnitude[sampleIndex];
+                tileIterate[slot] = iterateIn[sampleIndex];
+            }
+            else
+            {
+                tileColor[slot] = new Float4(0f, 0f, 0f, 0f);
+                tileGradient[slot] = 0f;
+                tileIterate[slot] = new Float4(0f, 0f, 0f, 0f);
+            }
+        }
+        Hlsl.GroupMemoryBarrierWithGroupSync();
+
         var gx = ThreadIds.X;
         var gy = ThreadIds.Y;
         if (gx >= gridWidth || gy >= gridHeight)
             return;
 
-        var index = gy * gridWidth + gx;
-        var original = colorIn[index];
-        var current = iterateIn[index];
+        var centerTile = (GroupIds.Y + UkiyoeSettings.FlattenRadius) * UkiyoeSettings.FlattenTileDim + GroupIds.X + UkiyoeSettings.FlattenRadius;
+        var original = tileColor[centerTile];
+        var current = tileIterate[centerTile];
         var centerFeature = UkiyoeShaderMath.AffinityFeature(original);
         var maxGradient = Hlsl.Max(Hlsl.AsFloat(scratch[UkiyoeSettings.ScratchMaxGradient]), 1e-6f);
-        var centerGradient = gradientMagnitude[index] / maxGradient;
+        var centerGradient = tileGradient[centerTile] / maxGradient;
         var invTwoSigmaSquared = 0.5f / (UkiyoeSettings.FlattenSigma * UkiyoeSettings.FlattenSigma);
 
         var numerator = original * beta;
@@ -374,15 +405,15 @@ internal readonly partial struct FlattenShader(
                 var ny = gy + dy;
                 if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
                     continue;
-                var neighborIndex = ny * gridWidth + nx;
-                var neighborOriginal = colorIn[neighborIndex];
+                var neighborTile = centerTile + dy * UkiyoeSettings.FlattenTileDim + dx;
+                var neighborOriginal = tileColor[neighborTile];
                 var feature = centerFeature - UkiyoeShaderMath.AffinityFeature(neighborOriginal);
                 var alphaDelta = original.W - neighborOriginal.W;
                 var featureDistance = feature.X * feature.X + feature.Y * feature.Y + feature.Z * feature.Z + alphaDelta * alphaDelta;
-                var neighborGradient = gradientMagnitude[neighborIndex] / maxGradient;
+                var neighborGradient = tileGradient[neighborTile] / maxGradient;
                 var edge = Hlsl.Max(centerGradient, neighborGradient);
                 var affinity = Hlsl.Exp(-Hlsl.Max(featureDistance, UkiyoeSettings.FlattenGradientWeight * edge * edge) * invTwoSigmaSquared);
-                var neighborCurrent = iterateIn[neighborIndex];
+                var neighborCurrent = tileIterate[neighborTile];
                 var difference = current - neighborCurrent;
                 var l1 = Hlsl.Abs(difference.X) + Hlsl.Abs(difference.Y) + Hlsl.Abs(difference.Z) + Hlsl.Abs(difference.W);
                 var weight = affinity / Hlsl.Max(l1, UkiyoeSettings.FlattenEpsilon);
@@ -391,7 +422,7 @@ internal readonly partial struct FlattenShader(
             }
         }
 
-        iterateOut[index] = numerator / denominator;
+        iterateOut[gy * gridWidth + gx] = numerator / denominator;
     }
 }
 
