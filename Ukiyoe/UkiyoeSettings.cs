@@ -49,6 +49,7 @@ internal static class UkiyoeSettings
     public const int ScratchBoundsMaxY = 5;
     public const int ScratchMaskHashSum = 6;
     public const int ScratchMaskHashMix = 7;
+    public const int MaximumPendingSubmissions = 32;
 
     public static QualitySettings GetQuality(UkiyoeQuality quality)
         => quality switch

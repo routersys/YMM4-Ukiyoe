@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using ComputeWeave;
 
 namespace Ukiyoe;
@@ -6,17 +6,9 @@ namespace Ukiyoe;
 internal sealed class UkiyoePipeline : IDisposable
 {
     private readonly GraphicsDevice _device;
+    private readonly UkiyoePipelineHost _host;
     private readonly ReadWriteBuffer<int> _scratch;
     private readonly ReadBackBuffer<int> _scratchReadBack;
-    private ReadWriteBuffer<Float4>? _colorIn;
-    private ReadWriteBuffer<Float4>? _colorA;
-    private ReadWriteBuffer<Float4>? _colorB;
-    private ReadWriteBuffer<float>? _gray;
-    private ReadWriteBuffer<float>? _gradientMagnitude;
-    private ReadWriteBuffer<float>? _response;
-    private ReadWriteBuffer<float>? _line;
-    private ReadWriteBuffer<Float2>? _tangentA;
-    private ReadWriteBuffer<Float2>? _tangentB;
     private StructureKey? _structureKey;
     private int _cachedLitCount;
     private int _cachedBoundsMinX;
@@ -30,9 +22,10 @@ internal sealed class UkiyoePipeline : IDisposable
     private int _packedWidth;
     private int _packedHeight;
 
-    private UkiyoePipeline(GraphicsDevice device)
+    private UkiyoePipeline(GraphicsDevice device, UkiyoePipelineHost host)
     {
         _device = device;
+        _host = host;
         _scratch = device.AllocateReadWriteBuffer<int>(UkiyoeSettings.ScratchLength);
         _scratchReadBack = device.AllocateReadBackBuffer<int>(UkiyoeSettings.ScratchLength);
     }
@@ -41,7 +34,7 @@ internal sealed class UkiyoePipeline : IDisposable
     {
         try
         {
-            return new UkiyoePipeline(GraphicsDevice.GetDefault());
+            return TryCreate(GraphicsDevice.GetDefault());
         }
         catch
         {
@@ -51,12 +44,16 @@ internal sealed class UkiyoePipeline : IDisposable
 
     public static UkiyoePipeline? TryCreate(GraphicsDevice device)
     {
+        UkiyoePipelineHost? host = null;
         try
         {
-            return new UkiyoePipeline(device);
+            host = UkiyoePipelineHost.Create(device, UkiyoeSettings.MaximumPendingSubmissions);
+            return new UkiyoePipeline(device, host);
         }
         catch
         {
+            host?.Dispose();
+            host?.WaitForDisposal();
             return null;
         }
     }
@@ -74,8 +71,7 @@ internal sealed class UkiyoePipeline : IDisposable
         var sourceTexture = _packedSource!;
         var outputTexture = _packedOutput!;
         sourceTexture.CopyFrom(MemoryMarshal.Cast<int, Bgra32>(source[..pixelCount]));
-        using (ComputeContext context = _device.CreateComputeContext())
-            RecordFullPipeline(in context, sourceTexture, outputTexture, width, height, in parameters);
+        SubmitFullPipeline(sourceTexture, outputTexture, width, height, in parameters).Wait();
         outputTexture.CopyTo(MemoryMarshal.Cast<int, Bgra32>(destination[..pixelCount]));
     }
 
@@ -87,9 +83,7 @@ internal sealed class UkiyoePipeline : IDisposable
         in Parameters parameters)
     {
         EnsureGridFor(width, height, parameters.Quality);
-        using ComputeContext context = _device.CreateComputeContext();
-        RecordFullPipeline(in context, source, destination, width, height, in parameters);
-        context.Submit();
+        _ = SubmitFullPipeline(source, destination, width, height, in parameters);
     }
 
     internal void ProcessSharedAndWait(
@@ -100,8 +94,7 @@ internal sealed class UkiyoePipeline : IDisposable
         in Parameters parameters)
     {
         EnsureGridFor(width, height, parameters.Quality);
-        using ComputeContext context = _device.CreateComputeContext();
-        RecordFullPipeline(in context, source, destination, width, height, in parameters);
+        SubmitFullPipeline(source, destination, width, height, in parameters).Wait();
     }
 
     internal bool Simulate(
@@ -116,11 +109,8 @@ internal sealed class UkiyoePipeline : IDisposable
     {
         EnsureGridFor(canvasWidth, canvasHeight, parameters.Quality);
         var derived = Derive(canvasWidth, canvasHeight, in parameters);
-        using (ComputeContext context = _device.CreateComputeContext())
-        {
-            RecordSilhouetteStage(in context, source, sourceOffsetX, sourceOffsetY, sourceWidth, sourceHeight, in derived);
-            RecordMaskHashStage(in context);
-        }
+        _host.RecordSilhouetteAndMaskHash(
+            source, _scratch, sourceOffsetX, sourceOffsetY, sourceWidth, sourceHeight, _gridWidth, _gridHeight, in derived).Wait();
         _scratchReadBack.CopyFrom(_scratch);
         var hashed = _scratchReadBack.Span;
         _cachedLitCount = hashed[UkiyoeSettings.ScratchLitCount];
@@ -141,8 +131,7 @@ internal sealed class UkiyoePipeline : IDisposable
         if (_structureKey == key)
             return false;
 
-        using (ComputeContext context = _device.CreateComputeContext())
-            RecordStructureStage(in context, in derived);
+        _host.RecordStructure(_scratch, _gridWidth, _gridHeight, in derived).Wait();
         _structureKey = key;
         return true;
     }
@@ -177,12 +166,10 @@ internal sealed class UkiyoePipeline : IDisposable
         in Parameters parameters)
     {
         var derived = Derive(canvasWidth, canvasHeight, in parameters);
-        using ComputeContext context = _device.CreateComputeContext();
-        RecordRenderStage(in context, output, rect, in derived, in parameters);
+        _host.RecordRender(output, in rect, _gridWidth, _gridHeight, in derived, in parameters).Wait();
     }
 
-    private void RecordFullPipeline(
-        in ComputeContext context,
+    private ComputeSubmission SubmitFullPipeline(
         ReadWriteTexture2D<Bgra32, Float4> source,
         ReadWriteTexture2D<Bgra32, Float4> output,
         int width,
@@ -191,107 +178,7 @@ internal sealed class UkiyoePipeline : IDisposable
     {
         _structureKey = null;
         var derived = Derive(width, height, in parameters);
-        RecordSilhouetteStage(in context, source, 0, 0, width, height, in derived);
-        RecordStructureStage(in context, in derived);
-        RecordRenderStage(in context, output, new PixelRect(0, 0, width, height), in derived, in parameters);
-    }
-
-    private void RecordSilhouetteStage(
-        in ComputeContext context,
-        ReadWriteTexture2D<Bgra32, Float4> source,
-        int sourceOffsetX,
-        int sourceOffsetY,
-        int sourceWidth,
-        int sourceHeight,
-        in DerivedValues derived)
-    {
-        context.For(_gridWidth, _gridHeight, new SilhouetteShader(
-            source, _colorIn!, _gray!, sourceOffsetX, sourceOffsetY, sourceWidth, sourceHeight, _gridWidth, _gridHeight, derived.CellSize));
-        context.Barrier(_colorIn!);
-        context.Barrier(_gray!);
-    }
-
-    private void RecordMaskHashStage(in ComputeContext context)
-    {
-        context.For(1, new MaskHashResetShader(_scratch));
-        context.Barrier(_scratch);
-        context.For(_gridWidth, _gridHeight, new MaskHashShader(_colorIn!, _scratch, _gridWidth, _gridHeight));
-        context.Barrier(_scratch);
-    }
-
-    private void RecordStructureStage(in ComputeContext context, in DerivedValues derived)
-    {
-        var gridWidth = _gridWidth;
-        var gridHeight = _gridHeight;
-
-        context.For(1, new InitScratchShader(_scratch));
-        context.Barrier(_scratch);
-        context.For(gridWidth, gridHeight, new GradientShader(_gray!, _tangentA!, _gradientMagnitude!, _scratch, gridWidth, gridHeight));
-        context.Barrier(_tangentA!);
-        context.Barrier(_gradientMagnitude!);
-        context.Barrier(_scratch);
-
-        var tangentIn = _tangentA!;
-        var tangentOut = _tangentB!;
-        for (var iteration = 0; iteration < derived.EtfIterations; iteration++)
-        {
-            context.For(gridWidth, gridHeight, new EtfShader(tangentIn, tangentOut, _gradientMagnitude!, _scratch, gridWidth, gridHeight));
-            context.Barrier(tangentOut);
-            (tangentIn, tangentOut) = (tangentOut, tangentIn);
-        }
-        var tangent = tangentIn;
-
-        context.For(gridWidth, gridHeight, new CopyColorShader(_colorIn!, _colorA!, gridWidth, gridHeight));
-        context.Barrier(_colorA!);
-        var flattenDispatchWidth = (gridWidth + UkiyoeSettings.FlattenGroupDim - 1) & ~(UkiyoeSettings.FlattenGroupDim - 1);
-        var flattenDispatchHeight = (gridHeight + UkiyoeSettings.FlattenGroupDim - 1) & ~(UkiyoeSettings.FlattenGroupDim - 1);
-        var iterateIn = _colorA!;
-        var iterateOut = _colorB!;
-        for (var iteration = 0; iteration < derived.FlattenIterations; iteration++)
-        {
-            context.For(flattenDispatchWidth, flattenDispatchHeight, new FlattenShader(
-                _colorIn!, iterateIn, iterateOut, _gradientMagnitude!, _scratch, gridWidth, gridHeight, derived.FlattenBeta));
-            context.Barrier(iterateOut);
-            (iterateIn, iterateOut) = (iterateOut, iterateIn);
-        }
-
-        for (var iteration = 0; iteration < derived.FdogIterations; iteration++)
-        {
-            context.For(gridWidth, gridHeight, new DogShader(
-                _gray!, tangent, _response!, gridWidth, gridHeight, derived.LineSigmaCells, derived.DogExtent));
-            context.Barrier(_response!);
-            context.For(gridWidth, gridHeight, new FlowAccumulateShader(
-                _response!, tangent, _line!, gridWidth, gridHeight, derived.FlowSigma, derived.FlowExtent));
-            context.Barrier(_line!);
-            if (iteration < derived.FdogIterations - 1)
-            {
-                context.For(gridWidth, gridHeight, new SuperimposeShader(_line!, _gray!, gridWidth, gridHeight, derived.LineThreshold));
-                context.Barrier(_gray!);
-            }
-        }
-    }
-
-    private void RecordRenderStage(
-        in ComputeContext context,
-        ReadWriteTexture2D<Bgra32, Float4> output,
-        PixelRect rect,
-        in DerivedValues derived,
-        in Parameters parameters)
-    {
-        context.For(rect.Width, rect.Height, new RenderShader(
-            _colorA!, _line!, output,
-            rect.X, rect.Y, rect.Width, rect.Height, _gridWidth, _gridHeight,
-            derived.CellSize,
-            UkiyoeSettings.ClampPaletteLevels(parameters.PaletteLevels),
-            derived.ShiftPixels,
-            Math.Clamp(parameters.Baren, 0f, 1f),
-            Math.Clamp(parameters.Paper, 0f, 1f),
-            derived.LineThreshold,
-            Math.Clamp(parameters.LineStrength, 0f, 1f),
-            parameters.LineColorR,
-            parameters.LineColorG,
-            parameters.LineColorB,
-            parameters.Seed));
+        return _host.RecordFullPipeline(source, output, _scratch, width, height, _gridWidth, _gridHeight, in derived, in parameters);
     }
 
     private DerivedValues Derive(int width, int height, in Parameters parameters)
@@ -328,22 +215,19 @@ internal sealed class UkiyoePipeline : IDisposable
         if (_gridWidth == gridWidth && _gridHeight == gridHeight)
             return;
 
-        DisposeGridBuffers();
         var gridLength = gridWidth * gridHeight;
-        _colorIn = _device.AllocateReadWriteBuffer<Float4>(gridLength);
-        _colorA = _device.AllocateReadWriteBuffer<Float4>(gridLength);
-        _colorB = _device.AllocateReadWriteBuffer<Float4>(gridLength);
-        _gray = _device.AllocateReadWriteBuffer<float>(gridLength);
-        _gradientMagnitude = _device.AllocateReadWriteBuffer<float>(gridLength);
-        _response = _device.AllocateReadWriteBuffer<float>(gridLength);
-        _line = _device.AllocateReadWriteBuffer<float>(gridLength);
-        _tangentA = _device.AllocateReadWriteBuffer<Float2>(gridLength);
-        _tangentB = _device.AllocateReadWriteBuffer<Float2>(gridLength);
+        if (!_host.TryEnsureGrid(
+                new UkiyoeGridResources.Plan(
+                    gridLength, gridLength, gridLength, gridLength, gridLength, gridLength, gridLength, gridLength, gridLength),
+                out _))
+            throw new InvalidOperationException();
+
         _cachedLitCount = 0;
         _cachedBoundsMinX = int.MaxValue;
         _cachedBoundsMinY = int.MaxValue;
         _cachedBoundsMaxX = int.MinValue;
         _cachedBoundsMaxY = int.MinValue;
+        _structureKey = null;
         _gridWidth = gridWidth;
         _gridHeight = gridHeight;
     }
@@ -361,45 +245,19 @@ internal sealed class UkiyoePipeline : IDisposable
         _packedHeight = height;
     }
 
-    private void DisposeGridBuffers()
-    {
-        _colorIn?.Dispose();
-        _colorA?.Dispose();
-        _colorB?.Dispose();
-        _gray?.Dispose();
-        _gradientMagnitude?.Dispose();
-        _response?.Dispose();
-        _line?.Dispose();
-        _tangentA?.Dispose();
-        _tangentB?.Dispose();
-        _colorIn = null;
-        _colorA = null;
-        _colorB = null;
-        _gray = null;
-        _gradientMagnitude = null;
-        _response = null;
-        _line = null;
-        _tangentA = null;
-        _tangentB = null;
-        _cachedLitCount = 0;
-        _cachedBoundsMinX = int.MaxValue;
-        _cachedBoundsMinY = int.MaxValue;
-        _cachedBoundsMaxX = int.MinValue;
-        _cachedBoundsMaxY = int.MinValue;
-        _structureKey = null;
-        _gridWidth = 0;
-        _gridHeight = 0;
-    }
-
     public void Dispose()
     {
-        DisposeGridBuffers();
+        _host.Dispose();
+        _host.WaitForDisposal();
         _packedSource?.Dispose();
         _packedOutput?.Dispose();
         _packedSource = null;
         _packedOutput = null;
         _packedWidth = 0;
         _packedHeight = 0;
+        _structureKey = null;
+        _gridWidth = 0;
+        _gridHeight = 0;
         _scratchReadBack.Dispose();
         _scratch.Dispose();
     }
@@ -417,7 +275,7 @@ internal sealed class UkiyoePipeline : IDisposable
         float LineDetail,
         float Flatten);
 
-    private readonly record struct DerivedValues(
+    internal readonly record struct DerivedValues(
         float CellSize,
         int EtfIterations,
         int FdogIterations,
