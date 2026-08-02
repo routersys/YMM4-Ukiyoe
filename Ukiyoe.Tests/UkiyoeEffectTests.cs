@@ -541,14 +541,16 @@ public sealed class UkiyoeEffectTests
     {
         using var devices = new GraphicsDevices();
         using var graphicsContext = devices.CreateContext();
-        using var interop = UkiyoeGpuInterop.TryCreate(graphicsContext);
-        if (interop is null)
+        using var provider = UkiyoeInteropProvider.TryCreate(graphicsContext, out var interopDevice);
+        if (provider is null || interopDevice is null)
         {
             Assert.Skip("Direct3D 11 and Direct3D 12 sharing is unavailable.");
             return;
         }
 
-        using var pipeline = UkiyoePipeline.TryCreate(interop.Device);
+        using var domain = interopDevice.RegisterExternalDomain(provider);
+        using var resourceSet = UkiyoeResourceSet.Create(interopDevice, domain);
+        using var pipeline = UkiyoePipeline.TryCreate(interopDevice);
         Assert.NotNull(pipeline);
 
         const int width = 96;
@@ -571,24 +573,36 @@ public sealed class UkiyoeEffectTests
             handle.Free();
         }
 
-        Assert.True(interop.EnsureResources(width, height));
-        var bounds = new RawRectF(0f, 0f, width, height);
+        Assert.True(resourceSet.TryEnsureSource(width, height, out _));
+        Assert.True(resourceSet.TryEnsureOutput(width, height, out _));
         var parameters = CreateParameters();
+        var renderContext = provider.RenderContext;
         for (var iteration = 0; iteration < 2; iteration++)
         {
-            interop.RenderInput(inputBitmap, bounds);
-            interop.BeginCompute();
-            try
+            using (var borrow = resourceSet.BeginSourceExternalOperation())
             {
-                pipeline!.Process(interop.SourceTexture, interop.OutputTexture, width, height, in parameters);
+                var previousTarget = renderContext.Target;
+                renderContext.Target = borrow.DangerousGetView().Bitmap;
+                renderContext.BeginDraw();
+                renderContext.Clear(null);
+                renderContext.DrawImage(
+                    inputBitmap,
+                    new System.Numerics.Vector2(0f, 0f),
+                    null,
+                    InterpolationMode.NearestNeighbor,
+                    CompositeMode.SourceCopy);
+                renderContext.EndDraw();
+                renderContext.Target = previousTarget;
             }
-            finally
-            {
-                interop.EndCompute();
-            }
-        }
-        interop.WaitForIdle();
 
+            pipeline!.Simulate(
+                resourceSet.GetSourceComputeBinding(), width, height, 0, 0, width, height, in parameters);
+            Assert.True(pipeline.TryGetVisibleBounds(width, height, in parameters, out var visible));
+            pipeline.RenderVisible(
+                resourceSet.GetOutputComputeBinding(), width, height, visible, in parameters);
+        }
+
+        using var outputLease = resourceSet.AcquireOutputExternalViewLease();
         using var staging = graphicsContext.DeviceContext.CreateBitmap(
             new SizeI(width, height),
             new BitmapProperties1(
@@ -596,7 +610,7 @@ public sealed class UkiyoeEffectTests
                 96f,
                 96f,
                 BitmapOptions.CpuRead | BitmapOptions.CannotDraw));
-        staging.CopyFromBitmap(interop.OutputBitmap);
+        staging.CopyFromBitmap(outputLease.DangerousGetView().Bitmap);
         var mapped = staging.Map(MapOptions.Read);
         try
         {

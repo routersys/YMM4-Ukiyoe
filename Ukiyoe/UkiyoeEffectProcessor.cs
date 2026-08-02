@@ -1,4 +1,5 @@
 using System.Numerics;
+using ComputeWeave;
 using Vortice.Direct2D1;
 using Vortice.Direct2D1.Effects;
 using YukkuriMovieMaker.Commons;
@@ -11,7 +12,14 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 {
     private readonly IGraphicsDevicesAndContext _devices;
     private readonly UkiyoeEffect _item;
-    private UkiyoeGpuInterop? _interop;
+    private UkiyoeInteropProvider? _interopProvider;
+    private ComputeInteropDomain? _interopDomain;
+    private UkiyoeResourceSet? _resourceSet;
+    private ExternalTextureLease<UkiyoeExternalView>? _outputLease;
+    private int _sourceWidth;
+    private int _sourceHeight;
+    private int _outputPhysicalWidth;
+    private int _outputPhysicalHeight;
     private UkiyoePipeline? _pipeline;
     private UkiyoeCustomEffect? _effect;
     private Crop? _outputCrop;
@@ -37,7 +45,7 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
     public override DrawDescription Update(EffectDescription effectDescription)
     {
-        if (IsPassThroughEffect || _effect is null || _outputCrop is null || _outputTransform is null || _outputTransformOutput is null || _interop is null || _pipeline is null || input is null)
+        if (IsPassThroughEffect || _effect is null || _outputCrop is null || _outputTransform is null || _outputTransformOutput is null || _resourceSet is null || _interopProvider is null || _pipeline is null || input is null)
             return effectDescription.DrawDescription;
 
         var frame = effectDescription.ItemPosition.Frame;
@@ -109,8 +117,14 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         var itemWidth = (int)widthValue;
         var itemHeight = (int)heightValue;
 
-        _interop.EnsureSource(itemWidth, itemHeight);
-        _interop.RenderInput(input, new Vortice.RawRectF(bounds.Left, bounds.Top, bounds.Left + itemWidth, bounds.Top + itemHeight));
+        if (!EnsureSource(itemWidth, itemHeight))
+        {
+            _effect.Amount = 0f;
+            _isFirst = true;
+            return effectDescription.DrawDescription;
+        }
+
+        RenderInput(new Vortice.RawRectF(bounds.Left, bounds.Top, bounds.Left + itemWidth, bounds.Top + itemHeight));
 
         var pipelineParameters = new UkiyoePipeline.Parameters(
             parameters.Quality,
@@ -128,24 +142,15 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             parameters.LineColor.B / 255f,
             Math.Max(parameters.Seed, 0));
 
-        bool structureChanged;
-        _interop.BeginCompute();
-        try
-        {
-            structureChanged = _pipeline.Simulate(
-                _interop.SourceTexture,
-                canvasWidth,
-                canvasHeight,
-                margin,
-                margin,
-                itemWidth,
-                itemHeight,
-                in pipelineParameters);
-        }
-        finally
-        {
-            _interop.EndCompute();
-        }
+        var structureChanged = _pipeline.Simulate(
+            _resourceSet.GetSourceComputeBinding(),
+            canvasWidth,
+            canvasHeight,
+            margin,
+            margin,
+            itemWidth,
+            itemHeight,
+            in pipelineParameters);
 
         if (!_pipeline.TryGetVisibleBounds(canvasWidth, canvasHeight, in pipelineParameters, out var rect))
         {
@@ -156,9 +161,16 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             return effectDescription.DrawDescription;
         }
 
-        if (!_interop.OutputCovers(rect.Width, rect.Height))
+        if (!OutputCovers(rect.Width, rect.Height))
             _outputCrop.SetInput(0, null, true);
-        var outputChanged = _interop.EnsureOutput(rect.Width, rect.Height);
+        if (!EnsureOutput(rect.Width, rect.Height, out var outputChanged))
+        {
+            _effect.Amount = 0f;
+            _parameters = parameters;
+            _isFirst = true;
+            _hasRenderState = false;
+            return effectDescription.DrawDescription;
+        }
         var renderState = new RenderState(
             pipelineParameters.LineDetail,
             pipelineParameters.LineStrength,
@@ -173,27 +185,21 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             rect);
         if (structureChanged || outputChanged || !_hasOutput || !_hasRenderState || _renderState != renderState)
         {
-            _interop.BeginCompute();
-            try
-            {
-                _pipeline.RenderVisible(
-                    _interop.OutputTexture,
-                    canvasWidth,
-                    canvasHeight,
-                    rect,
-                    in pipelineParameters);
-            }
-            finally
-            {
-                _interop.EndCompute();
-            }
+            _pipeline.RenderVisible(
+                _resourceSet.GetOutputComputeBinding(),
+                canvasWidth,
+                canvasHeight,
+                rect,
+                in pipelineParameters);
             _renderState = renderState;
             _hasRenderState = true;
         }
 
+        _outputLease ??= _resourceSet.AcquireOutputExternalViewLease();
+
         if (outputChanged || !_hasOutput)
         {
-            _outputCrop.SetInput(0, _interop.OutputBitmap, true);
+            _outputCrop.SetInput(0, _outputLease.DangerousGetView().Bitmap, true);
             _effect.SetInput(1, _outputTransformOutput, true);
         }
         var cropRect = new Vector4(0f, 0f, rect.Width, rect.Height);
@@ -216,15 +222,108 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         return effectDescription.DrawDescription;
     }
 
+    private bool EnsureSource(int width, int height)
+    {
+        if (_sourceWidth == width && _sourceHeight == height)
+            return true;
+
+        _sourceWidth = 0;
+        _sourceHeight = 0;
+        if (!_resourceSet!.TryEnsureSource(width, height, out _))
+            return false;
+
+        _sourceWidth = width;
+        _sourceHeight = height;
+        return true;
+    }
+
+    private bool OutputCovers(int width, int height)
+        => _outputLease is not null && _outputPhysicalWidth >= width && _outputPhysicalHeight >= height;
+
+    private bool EnsureOutput(int width, int height, out bool changed)
+    {
+        changed = false;
+        if (OutputCovers(width, height))
+            return true;
+
+        _outputLease?.Dispose();
+        _outputLease = null;
+        if (!_resourceSet!.TryEnsureOutput(width, height, out changed))
+        {
+            _outputPhysicalWidth = 0;
+            _outputPhysicalHeight = 0;
+            return false;
+        }
+
+        if (changed)
+        {
+            _outputPhysicalWidth = width;
+            _outputPhysicalHeight = height;
+        }
+
+        return true;
+    }
+
+    private void RenderInput(Vortice.RawRectF bounds)
+    {
+        var renderContext = _interopProvider!.RenderContext;
+        using var borrow = _resourceSet!.BeginSourceExternalOperation();
+        var previousTarget = renderContext.Target;
+        renderContext.Target = borrow.DangerousGetView().Bitmap;
+        renderContext.BeginDraw();
+        renderContext.Clear(null);
+        renderContext.DrawImage(
+            input,
+            new Vector2(-bounds.Left, -bounds.Top),
+            null,
+            InterpolationMode.NearestNeighbor,
+            CompositeMode.SourceCopy);
+        renderContext.EndDraw();
+        renderContext.Target = previousTarget;
+    }
+
+    private void ReleaseInterop()
+    {
+        _outputLease?.Dispose();
+        _outputLease = null;
+        _pipeline?.Dispose();
+        _pipeline = null;
+        _resourceSet?.Dispose();
+        _resourceSet?.WaitForDisposal();
+        _resourceSet = null;
+        _interopDomain?.Dispose();
+        _interopDomain?.WaitForDisposal();
+        _interopDomain = null;
+        _interopProvider?.Dispose();
+        _interopProvider = null;
+        _sourceWidth = 0;
+        _sourceHeight = 0;
+        _outputPhysicalWidth = 0;
+        _outputPhysicalHeight = 0;
+    }
+
     protected override ID2D1Image? CreateEffect(IGraphicsDevicesAndContext devices)
     {
-        var interop = UkiyoeGpuInterop.TryCreate(devices);
-        if (interop is null)
+        var interopProvider = UkiyoeInteropProvider.TryCreate(devices, out var interopDevice);
+        if (interopProvider is null || interopDevice is null)
             return null;
-        var pipeline = UkiyoePipeline.TryCreate(interop.Device);
-        if (pipeline is null)
+
+        try
         {
-            interop.Dispose();
+            _interopProvider = interopProvider;
+            _interopDomain = interopDevice.RegisterExternalDomain(interopProvider);
+            _resourceSet = UkiyoeResourceSet.Create(interopDevice, _interopDomain);
+            _pipeline = UkiyoePipeline.TryCreate(interopDevice);
+        }
+        catch
+        {
+            ReleaseInterop();
+            throw;
+        }
+
+        if (_pipeline is null)
+        {
+            ReleaseInterop();
             return null;
         }
 
@@ -240,8 +339,7 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             if (!effect.IsEnabled)
             {
                 effect.Dispose();
-                pipeline.Dispose();
-                interop.Dispose();
+                ReleaseInterop();
                 return null;
             }
             outputCrop = new Crop(devices.DeviceContext);
@@ -253,8 +351,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             outputTransform.SetInput(0, outputCropOutput, true);
             outputTransformOutput = outputTransform.Output;
             output = effect.Output;
-            _interop = interop;
-            _pipeline = pipeline;
             _effect = effect;
             _outputCrop = outputCrop;
             _outputCropOutput = outputCropOutput;
@@ -276,8 +372,7 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             outputCropOutput?.Dispose();
             outputCrop?.Dispose();
             effect?.Dispose();
-            pipeline.Dispose();
-            interop.Dispose();
+            ReleaseInterop();
             throw;
         }
     }
@@ -308,11 +403,7 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             if (disposing)
             {
                 ClearEffectChain();
-                _interop?.WaitForIdle();
-                _pipeline?.Dispose();
-                _pipeline = null;
-                _interop?.Dispose();
-                _interop = null;
+                ReleaseInterop();
             }
         }
         finally
