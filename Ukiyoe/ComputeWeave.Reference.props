@@ -1,9 +1,0 @@
-﻿<Project>
-	<PropertyGroup>
-		<PrivateComputeWeaveBuildProperties Condition="'$(BuildingSolutionFile)' != 'true'">CustomBeforeDirectoryBuildProps=$(MSBuildThisFileDirectory)ComputeWeave.Build.props;CustomAfterDirectoryBuildProps=$(MSBuildThisFileDirectory)ComputeWeave.Build.after.props</PrivateComputeWeaveBuildProperties>
-	</PropertyGroup>
-	<ItemGroup>
-		<ProjectReference Include="$(MSBuildThisFileDirectory)..\ComputeSharp\src\ComputeWeave.Core\ComputeWeave.Core.csproj" SetConfiguration="Configuration=$(Configuration)" SetPlatform="Platform=AnyCPU" AdditionalProperties="$(PrivateComputeWeaveBuildProperties)" GlobalPropertiesToRemove="SkipPluginDeploy" />
-		<ProjectReference Include="$(MSBuildThisFileDirectory)..\ComputeSharp\src\ComputeWeave\ComputeWeave.csproj" SetConfiguration="Configuration=$(Configuration)" SetPlatform="Platform=AnyCPU" AdditionalProperties="$(PrivateComputeWeaveBuildProperties)" GlobalPropertiesToRemove="SkipPluginDeploy" />
-	</ItemGroup>
-</Project>

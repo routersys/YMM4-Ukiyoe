@@ -3,14 +3,6 @@
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="ComputeSharp/src/ComputeWeave.Core/ComputeWeave.Core.csproj">
-    <Platform Solution="*|x64" Project="Any CPU" />
-  </Project>
-  <Project Path="ComputeSharp/src/ComputeWeave.Core.SourceGenerators/ComputeWeave.Core.SourceGenerators.csproj" />
-  <Project Path="ComputeSharp/src/ComputeWeave/ComputeWeave.csproj">
-    <Platform Solution="*|x64" Project="Any CPU" />
-  </Project>
-  <Project Path="ComputeSharp/src/ComputeWeave.SourceGenerators/ComputeWeave.SourceGenerators.csproj" />
   <Project Path="Ukiyoe/Ukiyoe.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>

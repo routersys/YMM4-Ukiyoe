@@ -26,6 +26,5 @@
     </Reference>
   </ItemGroup>
 
-  <Import Project="..\Ukiyoe\ComputeWeave.Reference.props" />
 
 </Project>
