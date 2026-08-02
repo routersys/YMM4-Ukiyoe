@@ -1,0 +1,8 @@
+﻿<Project>
+	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'ComputeWeave' or '$(MSBuildProjectName)' == 'ComputeWeave.Core'">
+		<IsPackagedProject>false</IsPackagedProject>
+	</PropertyGroup>
+	<ItemGroup Condition="'$(MSBuildProjectName)' == 'ComputeWeave.Core'">
+		<InternalsVisibleTo Include="Ukiyoe.ComputeWeave, PublicKey=$(AssemblySignPublicKey)" />
+	</ItemGroup>
+</Project>

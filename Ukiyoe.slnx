@@ -1,16 +1,16 @@
-<Solution>
+﻿<Solution>
   <Configurations>
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="ComputeSharp/src/ComputeSharp.Core/ComputeSharp.Core.csproj">
+  <Project Path="ComputeSharp/src/ComputeWeave.Core/ComputeWeave.Core.csproj">
     <Platform Solution="*|x64" Project="Any CPU" />
   </Project>
-  <Project Path="ComputeSharp/src/ComputeSharp.Core.SourceGenerators/ComputeSharp.Core.SourceGenerators.csproj" />
-  <Project Path="ComputeSharp/src/ComputeSharp/ComputeSharp.csproj">
+  <Project Path="ComputeSharp/src/ComputeWeave.Core.SourceGenerators/ComputeWeave.Core.SourceGenerators.csproj" />
+  <Project Path="ComputeSharp/src/ComputeWeave/ComputeWeave.csproj">
     <Platform Solution="*|x64" Project="Any CPU" />
   </Project>
-  <Project Path="ComputeSharp/src/ComputeSharp.SourceGenerators/ComputeSharp.SourceGenerators.csproj" />
+  <Project Path="ComputeSharp/src/ComputeWeave.SourceGenerators/ComputeWeave.SourceGenerators.csproj" />
   <Project Path="Ukiyoe/Ukiyoe.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>

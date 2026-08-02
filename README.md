@@ -1,4 +1,4 @@
-# 浮世絵 for YMM4
+﻿# 浮世絵 for YMM4
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](#)
@@ -46,7 +46,7 @@ YukkuriMovieMaker4（YMM4）上で動作する、素材を多色木版画の原�
 
 入力された現在のフレームの色とアルファ値から素材の絵柄を求め、多色木版画の工程になぞらえて3つの層を刷り重ねます。主線の層は、Kang・Lee・Chuiの論文「Coherent Line Drawing」（NPAR 2007）に基づき、エッジ接線流の非線形ベクトル平滑化で絵柄の流れを求め、流れに直交する方向の差分ガウスを流線に沿って集計して、つながりの良い輪郭線を取り出します。色面の層は、Bi・Han・Yuの論文「An L1 Image Transform for Edge-Preserving Smoothing and Scene-Level Intrinsic Decomposition」（SIGGRAPH 2015）のL1局所平坦化を前向きの反復重み付き最小二乗として解き、細部を消しながら際を保った均質な色面を作り、Winnemöllerらの論文「Real-Time Video Abstraction」（SIGGRAPH 2006）の軟量子化で限定パレットの階調へ寄せます。意匠の層は、階調ごとの刷り位置のずれ、ばれんの擦り跡、和紙の繊維のかすれを決定論的なハッシュ模様として重ねます。
 
-計算はComputeSharpの計算シェーダーがDirect3D 12で実行します。YMM4のDirect3D 11側とComputeSharpのDirect3D 12側は、共有テクスチャと共有フェンスで接続します。通常のフレーム処理では、CPUへの画素の読み戻しを行わず、8個の整数の読み戻しだけで素材の変化を判定します。素材が存在する最小の矩形の範囲だけを描画し、絵柄と構造のパラメータが変わらないフレームでは輪郭と平坦化の計算を再利用します。
+計算はComputeWeaveの計算シェーダーがDirect3D 12で実行します。YMM4のDirect3D 11側とComputeWeaveのDirect3D 12側は、共有テクスチャと共有フェンスで接続します。通常のフレーム処理では、CPUへの画素の読み戻しを行わず、8個の整数の読み戻しだけで素材の変化を判定します。素材が存在する最小の矩形の範囲だけを描画し、絵柄と構造のパラメータが変わらないフレームでは輪郭と平坦化の計算を再利用します。
 
 このエフェクトはAviUtl向けのEXO出力には対応していません。
 
@@ -187,11 +187,11 @@ YukkuriMovieMaker4（YMM4）上で動作する、素材を多色木版画の原�
 
 ## サードパーティライセンス
 
-本プラグインは以下のサードパーティソフトウェアを同梱・使用しています。ライセンスの全文は、リポジトリの [`.github/LICENSE/ComputeSharp.txt`](.github/LICENSE/ComputeSharp.txt) と、配布パッケージの `LICENSE` フォルダーに収録しています。
+本プラグインは以下のサードパーティソフトウェアを同梱・使用しています。ライセンスの全文は、リポジトリの [`.github/LICENSE/ComputeWeave.txt`](.github/LICENSE/ComputeWeave.txt) と、配布パッケージの `LICENSE` フォルダーに収録しています。
 
 | ソフトウェア | 用途 | ライセンス | 著作権表示 |
 |---|---|---|---|
-| [ComputeSharp](https://github.com/routersys/ComputeSharp) | Direct3D 12計算シェーダーとDirect3D 11・12共有処理 | MIT License | Copyright (c) 2024 Sergio Pedri |
+| [ComputeWeave](https://github.com/routersys/ComputeWeave) | Direct3D 12計算シェーダーとDirect3D 11・12共有処理 | MIT License | Copyright (c) 2024 Sergio Pedri |
 
 ---
 

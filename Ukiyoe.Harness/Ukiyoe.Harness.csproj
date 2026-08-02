@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -26,6 +26,6 @@
     </Reference>
   </ItemGroup>
 
-  <Import Project="..\Ukiyoe\ComputeSharp.Reference.props" />
+  <Import Project="..\Ukiyoe\ComputeWeave.Reference.props" />
 
 </Project>

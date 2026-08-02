@@ -1,14 +1,14 @@
-<Project>
-	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'ComputeSharp' or '$(MSBuildProjectName)' == 'ComputeSharp.Core'">
+﻿<Project>
+	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'ComputeWeave' or '$(MSBuildProjectName)' == 'ComputeWeave.Core'">
 		<BaseOutputPath>$(MSBuildProjectDirectory)\bin\Ukiyoe\</BaseOutputPath>
 		<BaseIntermediateOutputPath>$(MSBuildProjectDirectory)\obj\Ukiyoe\</BaseIntermediateOutputPath>
 		<MSBuildProjectExtensionsPath>$(MSBuildProjectDirectory)\obj\</MSBuildProjectExtensionsPath>
 		<DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**</DefaultItemExcludes>
 	</PropertyGroup>
-	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'ComputeSharp'">
-		<AssemblyName>Ukiyoe.ComputeSharp</AssemblyName>
+	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'ComputeWeave'">
+		<AssemblyName>Ukiyoe.ComputeWeave</AssemblyName>
 	</PropertyGroup>
-	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'ComputeSharp.Core'">
-		<AssemblyName>Ukiyoe.ComputeSharp.Core</AssemblyName>
+	<PropertyGroup Condition="'$(MSBuildProjectName)' == 'ComputeWeave.Core'">
+		<AssemblyName>Ukiyoe.ComputeWeave.Core</AssemblyName>
 	</PropertyGroup>
 </Project>

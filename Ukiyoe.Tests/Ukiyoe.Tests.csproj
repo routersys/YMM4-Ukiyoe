@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
@@ -63,6 +63,6 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <Import Project="..\Ukiyoe\ComputeSharp.Reference.props" />
+  <Import Project="..\Ukiyoe\ComputeWeave.Reference.props" />
 
 </Project>
