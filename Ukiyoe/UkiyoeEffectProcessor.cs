@@ -18,8 +18,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
     private ExternalTextureLease<UkiyoeExternalView>? _outputLease;
     private int _sourceWidth;
     private int _sourceHeight;
-    private int _outputPhysicalWidth;
-    private int _outputPhysicalHeight;
     private UkiyoePipeline? _pipeline;
     private UkiyoeCustomEffect? _effect;
     private Crop? _outputCrop;
@@ -238,7 +236,9 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
     }
 
     private bool OutputCovers(int width, int height)
-        => _outputLease is not null && _outputPhysicalWidth >= width && _outputPhysicalHeight >= height;
+        => _outputLease is { IsDisposed: false } lease &&
+           lease.Width >= width &&
+           lease.Height >= height;
 
     private bool EnsureOutput(int width, int height, out bool changed)
     {
@@ -248,20 +248,7 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
         _outputLease?.Dispose();
         _outputLease = null;
-        if (!_resourceSet!.TryEnsureOutput(width, height, out changed))
-        {
-            _outputPhysicalWidth = 0;
-            _outputPhysicalHeight = 0;
-            return false;
-        }
-
-        if (changed)
-        {
-            _outputPhysicalWidth = width;
-            _outputPhysicalHeight = height;
-        }
-
-        return true;
+        return _resourceSet!.TryEnsureOutput(width, height, out changed);
     }
 
     private void RenderInput(Vortice.RawRectF bounds)
@@ -298,8 +285,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         _interopProvider = null;
         _sourceWidth = 0;
         _sourceHeight = 0;
-        _outputPhysicalWidth = 0;
-        _outputPhysicalHeight = 0;
     }
 
     protected override ID2D1Image? CreateEffect(IGraphicsDevicesAndContext devices)
