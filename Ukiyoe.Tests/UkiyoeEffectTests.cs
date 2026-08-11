@@ -537,7 +537,7 @@ public sealed class UkiyoeEffectTests
     }
 
     [Fact]
-    public void Direct2DInteropProducesPrintFromOpaqueCore()
+    public void Direct2DInteropProducesPrintAfterGrowingFullHdOutput()
     {
         using var devices = new GraphicsDevices();
         using var graphicsContext = devices.CreateContext();
@@ -574,7 +574,6 @@ public sealed class UkiyoeEffectTests
         }
 
         Assert.True(resourceSet.TryEnsureSource(width, height, out _));
-        Assert.True(resourceSet.TryEnsureOutput(width, height, out _));
         var parameters = CreateParameters();
         var renderContext = provider.RenderContext;
         for (var iteration = 0; iteration < 2; iteration++)
@@ -598,8 +597,19 @@ public sealed class UkiyoeEffectTests
             pipeline!.Simulate(
                 resourceSet.GetSourceComputeBinding(), width, height, 0, 0, width, height, in parameters);
             Assert.True(pipeline.TryGetVisibleBounds(width, height, in parameters, out var visible));
+            Assert.True(resourceSet.TryEnsureOutput(
+                iteration == 0 ? width : 1920,
+                iteration == 0 ? height : 1080,
+                out _));
             pipeline.RenderVisible(
                 resourceSet.GetOutputComputeBinding(), width, height, visible, in parameters);
+
+            if (iteration == 0)
+            {
+                using var retiredLease = resourceSet.AcquireOutputExternalViewLease();
+                Assert.Equal(width, retiredLease.Width);
+                Assert.Equal(height, retiredLease.Height);
+            }
         }
 
         using var outputLease = resourceSet.AcquireOutputExternalViewLease();
