@@ -135,6 +135,47 @@ internal sealed partial class UkiyoePipelineHost
     }
 
     [ComputePipeline]
+    private void RecordStructurePrefix(
+        in ComputeContext context,
+        [ComputeOwnedResource(nameof(_grid))] UkiyoeGridResources grid,
+        [ComputeResource(ComputeResourceAccess.ReadWrite)] ReadWriteBuffer<int> scratch,
+        int gridWidth,
+        int gridHeight,
+        in UkiyoePipeline.DerivedValues derived)
+    {
+        _ = _device;
+
+        RecordStructurePrefixStage(in context, grid, scratch, gridWidth, gridHeight, in derived);
+    }
+
+    [ComputePipeline]
+    private void RecordFlatten(
+        in ComputeContext context,
+        [ComputeOwnedResource(nameof(_grid))] UkiyoeGridResources grid,
+        [ComputeResource(ComputeResourceAccess.ReadWrite)] ReadWriteBuffer<int> scratch,
+        int gridWidth,
+        int gridHeight,
+        in UkiyoePipeline.DerivedValues derived)
+    {
+        _ = _device;
+
+        RecordFlattenStage(in context, grid, scratch, gridWidth, gridHeight, in derived);
+    }
+
+    [ComputePipeline]
+    private void RecordLines(
+        in ComputeContext context,
+        [ComputeOwnedResource(nameof(_grid))] UkiyoeGridResources grid,
+        int gridWidth,
+        int gridHeight,
+        in UkiyoePipeline.DerivedValues derived)
+    {
+        _ = _device;
+
+        RecordLinesStage(in context, grid, gridWidth, gridHeight, in derived);
+    }
+
+    [ComputePipeline]
     private void RecordRender(
         in ComputeContext context,
         [ComputeOwnedResource(nameof(_grid))] UkiyoeGridResources grid,
@@ -189,6 +230,24 @@ internal sealed partial class UkiyoePipelineHost
         int gridHeight,
         in UkiyoePipeline.DerivedValues derived)
     {
+        RecordStructurePrefixStage(in context, grid, scratch, gridWidth, gridHeight, in derived);
+        RecordFlattenStage(in context, grid, scratch, gridWidth, gridHeight, in derived);
+        RecordLinesStage(in context, grid, gridWidth, gridHeight, in derived);
+    }
+
+    private static ReadWriteBuffer<Float2> GetTangent(UkiyoeGridResources grid, in UkiyoePipeline.DerivedValues derived)
+    {
+        return (derived.EtfIterations & 1) == 0 ? grid.TangentA : grid.TangentB;
+    }
+
+    private static void RecordStructurePrefixStage(
+        in ComputeContext context,
+        UkiyoeGridResources grid,
+        ReadWriteBuffer<int> scratch,
+        int gridWidth,
+        int gridHeight,
+        in UkiyoePipeline.DerivedValues derived)
+    {
         context.For(1, new InitScratchShader(scratch));
         context.Barrier(scratch);
         context.For(gridWidth, gridHeight, new GradientShader(grid.Gray, grid.TangentA, grid.GradientMagnitude, scratch, gridWidth, gridHeight));
@@ -204,8 +263,16 @@ internal sealed partial class UkiyoePipelineHost
             context.Barrier(tangentOut);
             (tangentIn, tangentOut) = (tangentOut, tangentIn);
         }
-        var tangent = tangentIn;
+    }
 
+    private static void RecordFlattenStage(
+        in ComputeContext context,
+        UkiyoeGridResources grid,
+        ReadWriteBuffer<int> scratch,
+        int gridWidth,
+        int gridHeight,
+        in UkiyoePipeline.DerivedValues derived)
+    {
         context.For(gridWidth, gridHeight, new CopyColorShader(grid.ColorIn, grid.ColorA, gridWidth, gridHeight));
         context.Barrier(grid.ColorA);
         var flattenDispatchWidth = (gridWidth + UkiyoeSettings.FlattenGroupDim - 1) & ~(UkiyoeSettings.FlattenGroupDim - 1);
@@ -219,7 +286,16 @@ internal sealed partial class UkiyoePipelineHost
             context.Barrier(iterateOut);
             (iterateIn, iterateOut) = (iterateOut, iterateIn);
         }
+    }
 
+    private static void RecordLinesStage(
+        in ComputeContext context,
+        UkiyoeGridResources grid,
+        int gridWidth,
+        int gridHeight,
+        in UkiyoePipeline.DerivedValues derived)
+    {
+        var tangent = GetTangent(grid, in derived);
         for (var iteration = 0; iteration < derived.FdogIterations; iteration++)
         {
             context.For(gridWidth, gridHeight, new DogShader(

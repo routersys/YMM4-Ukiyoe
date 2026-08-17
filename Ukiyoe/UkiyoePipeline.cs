@@ -9,7 +9,9 @@ internal sealed class UkiyoePipeline : IDisposable
     private readonly UkiyoePipelineHost _host;
     private readonly ReadWriteBuffer<int> _scratch;
     private readonly ReadBackBuffer<int> _scratchReadBack;
-    private StructureKey? _structureKey;
+    private PrefixKey? _prefixKey;
+    private FlattenKey? _flattenKey;
+    private LinesKey? _linesKey;
     private int _cachedLitCount;
     private int _cachedBoundsMinX;
     private int _cachedBoundsMinY;
@@ -144,21 +146,36 @@ internal sealed class UkiyoePipeline : IDisposable
         _cachedBoundsMinY = hashed[UkiyoeSettings.ScratchBoundsMinY];
         _cachedBoundsMaxX = hashed[UkiyoeSettings.ScratchBoundsMaxX];
         _cachedBoundsMaxY = hashed[UkiyoeSettings.ScratchBoundsMaxY];
-        var key = new StructureKey(
+        var prefixKey = new PrefixKey(
             hashed[UkiyoeSettings.ScratchMaskHashSum],
             hashed[UkiyoeSettings.ScratchMaskHashMix],
             canvasWidth,
             canvasHeight,
-            parameters.Quality,
-            parameters.LineWidth,
-            parameters.Coherence,
-            parameters.LineDetail,
-            parameters.Flatten);
-        if (_structureKey == key)
+            parameters.Quality);
+        var flattenKey = new FlattenKey(prefixKey, parameters.Flatten);
+        var linesKey = new LinesKey(prefixKey, parameters.LineWidth, parameters.Coherence, parameters.LineDetail);
+
+        if (_prefixKey == prefixKey && _flattenKey == flattenKey && _linesKey == linesKey)
             return false;
 
-        _host.RecordStructure(_scratch, _gridWidth, _gridHeight, in derived).Wait();
-        _structureKey = key;
+        if (_prefixKey != prefixKey)
+        {
+            _host.RecordStructurePrefix(_scratch, _gridWidth, _gridHeight, in derived).Wait();
+            _prefixKey = prefixKey;
+        }
+
+        if (_flattenKey != flattenKey)
+        {
+            _host.RecordFlatten(_scratch, _gridWidth, _gridHeight, in derived).Wait();
+            _flattenKey = flattenKey;
+        }
+
+        if (_linesKey != linesKey)
+        {
+            _host.RecordLines(_gridWidth, _gridHeight, in derived).Wait();
+            _linesKey = linesKey;
+        }
+
         return true;
     }
 
@@ -213,7 +230,9 @@ internal sealed class UkiyoePipeline : IDisposable
         int height,
         in Parameters parameters)
     {
-        _structureKey = null;
+        _prefixKey = null;
+        _flattenKey = null;
+        _linesKey = null;
         var derived = Derive(width, height, in parameters);
         return _host.RecordFullPipeline(source, output, _scratch, width, height, _gridWidth, _gridHeight, in derived, in parameters);
     }
@@ -264,7 +283,9 @@ internal sealed class UkiyoePipeline : IDisposable
         _cachedBoundsMinY = int.MaxValue;
         _cachedBoundsMaxX = int.MinValue;
         _cachedBoundsMaxY = int.MinValue;
-        _structureKey = null;
+        _prefixKey = null;
+        _flattenKey = null;
+        _linesKey = null;
         _gridWidth = gridWidth;
         _gridHeight = gridHeight;
     }
@@ -292,7 +313,9 @@ internal sealed class UkiyoePipeline : IDisposable
         _packedOutput = null;
         _packedWidth = 0;
         _packedHeight = 0;
-        _structureKey = null;
+        _prefixKey = null;
+        _flattenKey = null;
+        _linesKey = null;
         _gridWidth = 0;
         _gridHeight = 0;
         _scratchReadBack.Dispose();
@@ -301,16 +324,22 @@ internal sealed class UkiyoePipeline : IDisposable
 
     internal readonly record struct PixelRect(int X, int Y, int Width, int Height);
 
-    private readonly record struct StructureKey(
+    private readonly record struct PrefixKey(
         int MaskHashSum,
         int MaskHashMix,
         int CanvasWidth,
         int CanvasHeight,
-        UkiyoeQuality Quality,
+        UkiyoeQuality Quality);
+
+    private readonly record struct FlattenKey(
+        PrefixKey Prefix,
+        float Flatten);
+
+    private readonly record struct LinesKey(
+        PrefixKey Prefix,
         float LineWidth,
         float Coherence,
-        float LineDetail,
-        float Flatten);
+        float LineDetail);
 
     internal readonly record struct DerivedValues(
         float CellSize,
