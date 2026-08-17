@@ -69,18 +69,75 @@ foreach (var quality in new[] { UkiyoeQuality.Balanced, UkiyoeQuality.High, Ukiy
     var parameters = new UkiyoePipeline.Parameters(UkiyoeQuality.High, 0.5f, 0.5f, 0.5f, 0.6f, 6, 0.3f, 0.4f, 0.5f, 0.85f, 0.12f, 0.1f, 0.09f, 0);
 
     pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, in parameters);
+    pipeline.WaitForCompletion();
     var stopwatch = new Stopwatch();
-    var structureBest = double.MaxValue;
-    for (var round = 0; round < 12; round++)
+
+    var variants = new (string Name, Func<bool, UkiyoePipeline.Parameters> Make)[]
     {
-        var recompute = parameters with { Flatten = (round & 1) == 0 ? 0.7f : 0.6f };
-        stopwatch.Restart();
-        pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, in recompute);
+        ("cached", _ => parameters),
+        ("flatten", flip => parameters with { Flatten = flip ? 0.70f : 0.60f }),
+        ("lineWidth", flip => parameters with { LineWidth = flip ? 0.60f : 0.50f }),
+        ("coherence", flip => parameters with { Coherence = flip ? 0.60f : 0.50f }),
+        ("lineDetail", flip => parameters with { LineDetail = flip ? 0.60f : 0.50f }),
+        ("all", flip => parameters with
+        {
+            Flatten = flip ? 0.70f : 0.60f,
+            LineWidth = flip ? 0.60f : 0.50f,
+            Coherence = flip ? 0.60f : 0.50f,
+            LineDetail = flip ? 0.60f : 0.50f
+        })
+    };
+
+    const int rounds = 12;
+    var samples = new List<double>[variants.Length];
+    for (var index = 0; index < samples.Length; index++)
+        samples[index] = new List<double>(rounds);
+
+    // Warm up every variant once so that no sample carries first-use cost.
+    foreach (var (_, make) in variants)
+    {
+        var warmup = make(true);
+        pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, in warmup);
         pipeline.WaitForCompletion();
-        stopwatch.Stop();
-        structureBest = Math.Min(structureBest, stopwatch.Elapsed.TotalMilliseconds);
     }
-    Console.WriteLine($"structure recompute: {structureBest:F2} ms");
+
+    // Interleave the variants and shuffle their order every round, so that a
+    // machine that drifts over the run drifts across every variant alike.
+    var order = Enumerable.Range(0, variants.Length).ToArray();
+    var random = new Random(17);
+    for (var round = 0; round < rounds; round++)
+    {
+        for (var index = order.Length - 1; index > 0; index--)
+        {
+            var swap = random.Next(index + 1);
+            (order[index], order[swap]) = (order[swap], order[index]);
+        }
+
+        foreach (var index in order)
+        {
+            // Settle the cache into this variant's baseline without measuring it,
+            // so the measured call invalidates only the subgraph under test.
+            var settled = variants[index].Make(false);
+            pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, in settled);
+            pipeline.WaitForCompletion();
+
+            var measured = variants[index].Make(true);
+            stopwatch.Restart();
+            pipeline.Simulate(sourceTexture, width, height, 0, 0, width, height, in measured);
+            pipeline.WaitForCompletion();
+            stopwatch.Stop();
+            samples[index].Add(stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    Console.WriteLine($"structure recompute over {rounds} interleaved rounds (ms)");
+    for (var index = 0; index < variants.Length; index++)
+    {
+        var sorted = samples[index].OrderBy(static value => value).ToArray();
+        var median = sorted[sorted.Length / 2];
+        Console.WriteLine(
+            $"  {variants[index].Name,-11} min={sorted[0],7:F2}  median={median,7:F2}  max={sorted[^1],7:F2}");
+    }
 
     if (pipeline.TryGetVisibleBounds(width, height, in parameters, out var rect))
     {
