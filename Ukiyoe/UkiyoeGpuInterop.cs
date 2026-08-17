@@ -1,62 +1,23 @@
 using ComputeWeave;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
-using Vortice.DXGI;
 using YukkuriMovieMaker.Commons;
-using PixelFormat = Vortice.DCommon.PixelFormat;
 
 namespace Ukiyoe;
 
-internal sealed class UkiyoeExternalView(ID3D11Texture2D texture, ID2D1Bitmap1 bitmap) : IDisposable
+internal sealed class UkiyoeInteropProvider : ComputeExternalDirect3D11Provider
 {
-    private readonly ID3D11Texture2D _texture = texture;
-    private readonly ID2D1Bitmap1 _bitmap = bitmap;
-
-    public ID2D1Bitmap1 Bitmap => _bitmap;
-
-    public void Dispose()
-    {
-        _bitmap.Dispose();
-        _texture.Dispose();
-    }
-}
-
-internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<UkiyoeExternalView>
-{
-    private readonly ID3D11Device1 _device;
-    private readonly ID3D11Device5 _device5;
-    private readonly ID3D11DeviceContext4 _context;
     private readonly ID2D1DeviceContext6 _renderContext;
-    private readonly ComputeExternalQueueScheduler _scheduler;
-    private readonly long _adapterLuid;
-    private ID3D11Fence? _fence;
-    private bool _disposed;
 
     private UkiyoeInteropProvider(
         ID3D11Device1 device,
-        ID3D11Device5 device5,
         ID3D11DeviceContext4 context,
         ID2D1DeviceContext6 renderContext,
-        ComputeExternalQueueScheduler scheduler,
-        long adapterLuid)
+        ComputeExternalQueueScheduler scheduler)
+        : base(device.NativePointer, context.NativePointer, renderContext.NativePointer, scheduler)
     {
-        _device = device;
-        _device5 = device5;
-        _context = context;
         _renderContext = renderContext;
-        _scheduler = scheduler;
-        _adapterLuid = adapterLuid;
     }
-
-    public ExternalAdapterIdentity AdapterIdentity => new(_adapterLuid);
-
-    public ComputeExternalQueueScheduler Scheduler => _scheduler;
-
-    public ExternalInteropCapabilities Capabilities =>
-        ExternalInteropCapabilities.SharedFence |
-        ExternalInteropCapabilities.SharedTexture2D |
-        ExternalInteropCapabilities.SingleImmediateContextOrdering |
-        ExternalInteropCapabilities.PersistentExternalViewOrdering;
 
     public ID2D1DeviceContext6 RenderContext => _renderContext;
 
@@ -70,7 +31,6 @@ internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<Uk
         graphicsDevice = null;
 
         ID3D11Device1? device = null;
-        ID3D11Device5? device5 = null;
         ID3D11DeviceContext4? context = null;
         ID2D1DeviceContext6? renderContext = null;
         try
@@ -84,86 +44,64 @@ internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<Uk
 
             graphicsDevice = enumerator.Current;
             device = devices.D3D.Device.QueryInterface<ID3D11Device1>();
-            device5 = devices.D3D.Device.QueryInterface<ID3D11Device5>();
             context = devices.D3D.DeviceContext.QueryInterface<ID3D11DeviceContext4>();
             renderContext = devices.D2D.Device
                 .CreateDeviceContext(DeviceContextOptions.EnableMultithreadedOptimizations)
                 .QueryInterface<ID2D1DeviceContext6>();
-            return new UkiyoeInteropProvider(device, device5, context, renderContext, scheduler, graphicsDevice.Luid.ToInt64());
+            var provider = new UkiyoeInteropProvider(device, context, renderContext, scheduler);
+            renderContext = null;
+            return provider;
         }
         catch
         {
-            renderContext?.Dispose();
-            context?.Dispose();
-            device5?.Dispose();
-            device?.Dispose();
             graphicsDevice = null;
             return null;
         }
-    }
-
-    public void Initialize(in ExternalTimelineInitialization initialization)
-    {
-        _fence = _device5.OpenSharedFence<ID3D11Fence>(initialization.SharedFenceHandle.DangerousGetHandle());
-    }
-
-    public void EnqueueSignal(ulong value)
-    {
-        _context.Signal(_fence!, value);
-    }
-
-    public void FlushAfterSignal()
-    {
-        _context.Flush();
-    }
-
-    public void EnqueueWait(ulong value)
-    {
-        _context.Wait(_fence!, value);
-    }
-
-    public UkiyoeExternalView OpenSharedTexture(BorrowedSharedHandle resourceHandle, in ExternalTextureDescriptor descriptor)
-    {
-        ID3D11Texture2D? texture = null;
-        ID2D1Bitmap1? bitmap = null;
-        try
-        {
-            texture = _device.OpenSharedResource1<ID3D11Texture2D>(resourceHandle.DangerousGetHandle());
-            using var surface = texture.QueryInterface<IDXGISurface>();
-            var pixelFormat = new PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied);
-            var options = descriptor.ExternalUsage is ExternalTextureUsage.RenderTarget
-                ? BitmapOptions.Target
-                : BitmapOptions.None;
-            bitmap = _renderContext.CreateBitmapFromDxgiSurface(
-                surface,
-                new BitmapProperties1(pixelFormat, 96f, 96f, options));
-            var view = new UkiyoeExternalView(texture, bitmap);
-            texture = null;
-            bitmap = null;
-            return view;
-        }
         finally
         {
-            bitmap?.Dispose();
-            texture?.Dispose();
+            // 基底は自身の参照を取得済みなので、ここで取得した参照は返す。
+            // renderContext は成功時に provider が引き取るため null にしてある。
+            renderContext?.Dispose();
+            context?.Dispose();
+            device?.Dispose();
         }
     }
 
-    public void OnDeviceTerminal(Exception reason)
+    protected override void DisposeCore()
     {
+        _renderContext.Dispose();
+    }
+}
+
+/// <summary>
+/// External View のビットマップを Vortice の束縛へ写し、参照が変わるまで保持する。
+/// </summary>
+/// <remarks>
+/// SharpGen の <see cref="ID2D1Bitmap1"/> はファイナライザーで Release する。素のポインタから包んだものを
+/// 放置すると View の参照を奪うため、包む際に AddRef し、破棄で対にする。
+/// </remarks>
+internal sealed class UkiyoeBitmapBinding : IDisposable
+{
+    private nint _pointer;
+    private ID2D1Bitmap1? _bitmap;
+
+    public ID2D1Bitmap1 Get(ExternalDirect3D11TextureView view)
+    {
+        if (_pointer != view.Bitmap || _bitmap is null)
+        {
+            _bitmap?.Dispose();
+            _bitmap = new ID2D1Bitmap1(view.Bitmap);
+            _bitmap.AddRef();
+            _pointer = view.Bitmap;
+        }
+        return _bitmap;
     }
 
     public void Dispose()
     {
-        if (_disposed)
-            return;
-
-        _disposed = true;
-        _fence?.Dispose();
-        _renderContext.Dispose();
-        _context.Dispose();
-        _device5.Dispose();
-        _device.Dispose();
+        _bitmap?.Dispose();
+        _bitmap = null;
+        _pointer = 0;
     }
 }
 
@@ -178,7 +116,7 @@ internal sealed partial class UkiyoeResourceSet
         ComputeAlphaMode.Premultiplied,
         ComputeSharedTextureInitialOwner.External,
         ComputeResourceRecovery.RecreateFromHost)]
-    private readonly SharedTextureSlot<Bgra32, Float4, UkiyoeExternalView> _source;
+    private readonly SharedTextureSlot<Bgra32, Float4, ExternalDirect3D11TextureView> _source;
 
     [ComputeSharedTexture(
         ComputeResourceResizePolicy.GrowOnly,
@@ -188,5 +126,5 @@ internal sealed partial class UkiyoeResourceSet
         ComputeAlphaMode.Premultiplied,
         ComputeSharedTextureInitialOwner.Compute,
         ComputeResourceRecovery.Recompute)]
-    private readonly SharedTextureSlot<Bgra32, Float4, UkiyoeExternalView> _output;
+    private readonly SharedTextureSlot<Bgra32, Float4, ExternalDirect3D11TextureView> _output;
 }
