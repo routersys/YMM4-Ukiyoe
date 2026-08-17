@@ -490,6 +490,63 @@ public sealed class UkiyoeEffectTests
         }
     }
 
+    [Theory]
+    [InlineData("flatten")]
+    [InlineData("lineWidth")]
+    [InlineData("coherence")]
+    [InlineData("lineDetail")]
+    public void PartialStructureRecomputeMatchesAFullRecompute(string changed)
+    {
+        using var incremental = UkiyoePipeline.TryCreate();
+        using var reference = UkiyoePipeline.TryCreate();
+        if (incremental is null || reference is null)
+        {
+            Assert.Skip("Direct3D 12 is unavailable.");
+            return;
+        }
+
+        const int width = 128;
+        const int height = 128;
+        var source = CreateGradientSource(width, height, 40, 40, 48, 48);
+        var device = GraphicsDevice.GetDefault();
+        using var sourceTexture = device.AllocateReadWriteTexture2D<Bgra32, Float4>(width, height);
+        var sourcePixels = new Bgra32[source.Length];
+        for (var index = 0; index < source.Length; index++)
+            sourcePixels[index].PackedValue = unchecked((uint)source[index]);
+        sourceTexture.CopyFrom(sourcePixels);
+
+        var first = CreateParameters(seed: 7);
+        var second = changed switch
+        {
+            "flatten" => first with { Flatten = 0.15f },
+            "lineWidth" => first with { LineWidth = 0.95f },
+            "coherence" => first with { Coherence = 0.05f },
+            _ => first with { LineDetail = 0.95f }
+        };
+
+        incremental.Simulate(sourceTexture, width, height, 0, 0, width, height, in first);
+        Assert.True(incremental.Simulate(sourceTexture, width, height, 0, 0, width, height, in second));
+
+        reference.Simulate(sourceTexture, width, height, 0, 0, width, height, in second);
+
+        Assert.True(incremental.TryGetVisibleBounds(width, height, in second, out var rect));
+        Assert.True(reference.TryGetVisibleBounds(width, height, in second, out var referenceRect));
+        Assert.Equal(referenceRect, rect);
+
+        using var incrementalOutput = device.AllocateReadWriteTexture2D<Bgra32, Float4>(rect.Width, rect.Height);
+        using var referenceOutput = device.AllocateReadWriteTexture2D<Bgra32, Float4>(rect.Width, rect.Height);
+        incremental.RenderVisible(incrementalOutput, width, height, rect, in second);
+        reference.RenderVisible(referenceOutput, width, height, rect, in second);
+
+        var incrementalPixels = new Bgra32[rect.Width * rect.Height];
+        var referencePixels = new Bgra32[rect.Width * rect.Height];
+        incrementalOutput.CopyTo(incrementalPixels);
+        referenceOutput.CopyTo(referencePixels);
+
+        for (var index = 0; index < incrementalPixels.Length; index++)
+            Assert.Equal(referencePixels[index].PackedValue, incrementalPixels[index].PackedValue);
+    }
+
     [Fact]
     public void SimulateCachesStructureUntilInputsChange()
     {
