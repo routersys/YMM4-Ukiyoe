@@ -17,8 +17,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
     private ComputeInteropDomain? _interopDomain;
     private UkiyoeResourceSet? _resourceSet;
     private ExternalTextureLease<ExternalDirect3D11TextureView>? _outputLease;
-    private readonly UkiyoeBitmapBinding _outputBitmap = new();
-    private readonly UkiyoeBitmapBinding _sourceBitmap = new();
     private int _sourceWidth;
     private int _sourceHeight;
     private UkiyoePipeline? _pipeline;
@@ -200,7 +198,8 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
         if (outputChanged || !_hasOutput)
         {
-            _outputCrop.SetInput(0, _outputBitmap.Get(_outputLease.DangerousGetView()), true);
+            using var outputBitmap = new ID2D1Bitmap1(_outputLease.DangerousGetView().AddRefBitmap());
+            _outputCrop.SetInput(0, outputBitmap, true);
             _effect.SetInput(1, _outputTransformOutput, true);
         }
         var cropRect = new Vector4(0f, 0f, rect.Width, rect.Height);
@@ -251,7 +250,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
         _outputLease?.Dispose();
         _outputLease = null;
-        _outputBitmap.Dispose();
         return _resourceSet!.TryEnsureOutput(width, height, out changed);
     }
 
@@ -260,7 +258,8 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         var renderContext = _interopProvider!.RenderContext;
         using var borrow = _resourceSet!.BeginSourceExternalOperation();
         var previousTarget = renderContext.Target;
-        renderContext.Target = _sourceBitmap.Get(borrow.DangerousGetView());
+        using var sourceBitmap = new ID2D1Bitmap1(borrow.DangerousGetView().AddRefBitmap());
+        renderContext.Target = sourceBitmap;
         renderContext.BeginDraw();
         renderContext.Clear(null);
         renderContext.DrawImage(
@@ -275,9 +274,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
     private void ReleaseInterop()
     {
-        // 包み手は自身の参照を持つため、View より先に返す。
-        _outputBitmap.Dispose();
-        _sourceBitmap.Dispose();
         _outputLease?.Dispose();
         _outputLease = null;
         _pipeline?.Dispose();

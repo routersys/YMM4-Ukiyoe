@@ -73,38 +73,6 @@ internal sealed class UkiyoeInteropProvider : ComputeExternalDirect3D11Provider
     }
 }
 
-/// <summary>
-/// External View のビットマップを Vortice の束縛へ写し、参照が変わるまで保持する。
-/// </summary>
-/// <remarks>
-/// SharpGen の <see cref="ID2D1Bitmap1"/> はファイナライザーで Release する。素のポインタから包んだものを
-/// 放置すると View の参照を奪うため、包む際に AddRef し、破棄で対にする。
-/// </remarks>
-internal sealed class UkiyoeBitmapBinding : IDisposable
-{
-    private nint _pointer;
-    private ID2D1Bitmap1? _bitmap;
-
-    public ID2D1Bitmap1 Get(ExternalDirect3D11TextureView view)
-    {
-        if (_pointer != view.Bitmap || _bitmap is null)
-        {
-            _bitmap?.Dispose();
-            _bitmap = new ID2D1Bitmap1(view.Bitmap);
-            _bitmap.AddRef();
-            _pointer = view.Bitmap;
-        }
-        return _bitmap;
-    }
-
-    public void Dispose()
-    {
-        _bitmap?.Dispose();
-        _bitmap = null;
-        _pointer = 0;
-    }
-}
-
 [ComputeInteropResourceSet]
 internal sealed partial class UkiyoeResourceSet
 {
