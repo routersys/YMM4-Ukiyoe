@@ -541,7 +541,8 @@ public sealed class UkiyoeEffectTests
     {
         using var devices = new GraphicsDevices();
         using var graphicsContext = devices.CreateContext();
-        using var provider = UkiyoeInteropProvider.TryCreate(graphicsContext, out var interopDevice);
+        using var scheduler = ComputeExternalQueueScheduler.Create();
+        using var provider = UkiyoeInteropProvider.TryCreate(graphicsContext, scheduler, out var interopDevice);
         if (provider is null || interopDevice is null)
         {
             Assert.Skip("Direct3D 11 and Direct3D 12 sharing is unavailable.");

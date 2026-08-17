@@ -1,4 +1,3 @@
-using System.Threading;
 using ComputeWeave;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
@@ -7,27 +6,6 @@ using YukkuriMovieMaker.Commons;
 using PixelFormat = Vortice.DCommon.PixelFormat;
 
 namespace Ukiyoe;
-
-internal sealed class UkiyoeQueueScheduler : ComputeExternalQueueScheduler
-{
-    private int _entered;
-
-    protected override void EnterCore()
-    {
-        if (Interlocked.CompareExchange(ref _entered, 1, 0) != 0)
-            throw new InvalidOperationException();
-    }
-
-    protected override void ExitCore()
-    {
-        if (Interlocked.Exchange(ref _entered, 0) != 1)
-            throw new InvalidOperationException();
-    }
-
-    protected override void DisposeCore()
-    {
-    }
-}
 
 internal sealed class UkiyoeExternalView(ID3D11Texture2D texture, ID2D1Bitmap1 bitmap) : IDisposable
 {
@@ -49,7 +27,7 @@ internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<Uk
     private readonly ID3D11Device5 _device5;
     private readonly ID3D11DeviceContext4 _context;
     private readonly ID2D1DeviceContext6 _renderContext;
-    private readonly UkiyoeQueueScheduler _scheduler;
+    private readonly ComputeExternalQueueScheduler _scheduler;
     private readonly long _adapterLuid;
     private ID3D11Fence? _fence;
     private bool _disposed;
@@ -59,7 +37,7 @@ internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<Uk
         ID3D11Device5 device5,
         ID3D11DeviceContext4 context,
         ID2D1DeviceContext6 renderContext,
-        UkiyoeQueueScheduler scheduler,
+        ComputeExternalQueueScheduler scheduler,
         long adapterLuid)
     {
         _device = device;
@@ -82,15 +60,19 @@ internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<Uk
 
     public ID2D1DeviceContext6 RenderContext => _renderContext;
 
-    public static UkiyoeInteropProvider? TryCreate(IGraphicsDevicesAndContext devices, out GraphicsDevice? graphicsDevice)
+    public static UkiyoeInteropProvider? TryCreate(
+        IGraphicsDevicesAndContext devices,
+        ComputeExternalQueueScheduler scheduler,
+        out GraphicsDevice? graphicsDevice)
     {
+        ArgumentNullException.ThrowIfNull(scheduler);
+
         graphicsDevice = null;
 
         ID3D11Device1? device = null;
         ID3D11Device5? device5 = null;
         ID3D11DeviceContext4? context = null;
         ID2D1DeviceContext6? renderContext = null;
-        UkiyoeQueueScheduler? scheduler = null;
         try
         {
             var adapterLuidText = devices.DXGI.Adapter.Description.Luid.ToString();
@@ -107,12 +89,10 @@ internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<Uk
             renderContext = devices.D2D.Device
                 .CreateDeviceContext(DeviceContextOptions.EnableMultithreadedOptimizations)
                 .QueryInterface<ID2D1DeviceContext6>();
-            scheduler = new UkiyoeQueueScheduler();
             return new UkiyoeInteropProvider(device, device5, context, renderContext, scheduler, graphicsDevice.Luid.ToInt64());
         }
         catch
         {
-            scheduler?.Dispose();
             renderContext?.Dispose();
             context?.Dispose();
             device5?.Dispose();
@@ -184,7 +164,6 @@ internal sealed class UkiyoeInteropProvider : IComputeExternalInteropProvider<Uk
         _context.Dispose();
         _device5.Dispose();
         _device.Dispose();
-        _scheduler.Dispose();
     }
 }
 

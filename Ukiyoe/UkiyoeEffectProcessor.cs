@@ -12,6 +12,7 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 {
     private readonly IGraphicsDevicesAndContext _devices;
     private readonly UkiyoeEffect _item;
+    private ComputeExternalQueueScheduler? _scheduler;
     private UkiyoeInteropProvider? _interopProvider;
     private ComputeInteropDomain? _interopDomain;
     private UkiyoeResourceSet? _resourceSet;
@@ -283,15 +284,23 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         _interopDomain = null;
         _interopProvider?.Dispose();
         _interopProvider = null;
+        _scheduler?.Dispose();
+        _scheduler = null;
         _sourceWidth = 0;
         _sourceHeight = 0;
     }
 
     protected override ID2D1Image? CreateEffect(IGraphicsDevicesAndContext devices)
     {
-        var interopProvider = UkiyoeInteropProvider.TryCreate(devices, out var interopDevice);
+        var scheduler = ComputeExternalQueueScheduler.Create();
+        var interopProvider = UkiyoeInteropProvider.TryCreate(devices, scheduler, out var interopDevice);
         if (interopProvider is null || interopDevice is null)
+        {
+            scheduler.Dispose();
             return null;
+        }
+
+        _scheduler = scheduler;
 
         try
         {
