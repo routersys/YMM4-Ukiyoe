@@ -639,7 +639,8 @@ public sealed class UkiyoeEffectTests
             using (var borrow = resourceSet.BeginSourceExternalOperation())
             {
                 var previousTarget = renderContext.Target;
-                renderContext.Target = borrow.DangerousGetView().Bitmap;
+                using var sourceBitmap = new UkiyoeBitmapBinding();
+                renderContext.Target = sourceBitmap.Get(borrow.DangerousGetView());
                 renderContext.BeginDraw();
                 renderContext.Clear(null);
                 renderContext.DrawImage(
@@ -678,7 +679,8 @@ public sealed class UkiyoeEffectTests
                 96f,
                 96f,
                 BitmapOptions.CpuRead | BitmapOptions.CannotDraw));
-        staging.CopyFromBitmap(outputLease.DangerousGetView().Bitmap);
+        using var outputBitmap = new UkiyoeBitmapBinding();
+        staging.CopyFromBitmap(outputBitmap.Get(outputLease.DangerousGetView()));
         var mapped = staging.Map(MapOptions.Read);
         try
         {
