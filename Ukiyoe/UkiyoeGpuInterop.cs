@@ -35,14 +35,9 @@ internal sealed class UkiyoeInteropProvider : ComputeExternalDirect3D11Provider
         ID2D1DeviceContext6? renderContext = null;
         try
         {
-            var adapterLuidText = devices.DXGI.Adapter.Description.Luid.ToString();
-            using var enumerator = GraphicsDevice
-                .QueryDevices(candidate => string.Equals(candidate.Luid.ToString(), adapterLuidText, StringComparison.Ordinal))
-                .GetEnumerator();
-            if (!enumerator.MoveNext())
+            if (!GraphicsDevice.TryGetDevice(new ExternalAdapterIdentity(devices.DXGI.Adapter.Description.Luid), out graphicsDevice))
                 return null;
 
-            graphicsDevice = enumerator.Current;
             device = devices.D3D.Device.QueryInterface<ID3D11Device1>();
             context = devices.D3D.DeviceContext.QueryInterface<ID3D11DeviceContext4>();
             renderContext = devices.D2D.Device
