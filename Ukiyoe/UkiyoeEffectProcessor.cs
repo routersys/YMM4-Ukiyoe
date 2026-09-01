@@ -17,8 +17,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
     private ComputeInteropDomain? _interopDomain;
     private UkiyoeResourceSet? _resourceSet;
     private ExternalTextureLease<ExternalDirect3D11TextureView>? _outputLease;
-    private int _sourceWidth;
-    private int _sourceHeight;
     private UkiyoePipeline? _pipeline;
     private UkiyoeCustomEffect? _effect;
     private Crop? _outputCrop;
@@ -224,17 +222,7 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
     private bool EnsureSource(int width, int height)
     {
-        if (_sourceWidth == width && _sourceHeight == height)
-            return true;
-
-        _sourceWidth = 0;
-        _sourceHeight = 0;
-        if (!_resourceSet!.TryEnsureSource(width, height, out _))
-            return false;
-
-        _sourceWidth = width;
-        _sourceHeight = height;
-        return true;
+        return _resourceSet!.TryEnsureSource(width, height, out _);
     }
 
     private bool OutputCovers(int width, int height)
@@ -288,8 +276,6 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         _interopProvider = null;
         _scheduler?.Dispose();
         _scheduler = null;
-        _sourceWidth = 0;
-        _sourceHeight = 0;
     }
 
     protected override ID2D1Image? CreateEffect(IGraphicsDevicesAndContext devices)
