@@ -71,7 +71,7 @@
 	<Import Project="..\YMM4-Telemetry\Telemetry.props" />
 
 	<ItemGroup>
-		<PackageReference Include="ComputeWeave" Version="2.3.0" />
+		<PackageReference Include="ComputeWeave" Version="2.6.0" />
 		<PackageReference Include="ILRepack" Version="2.0.46" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="true" />
 		<PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.142" />
 	</ItemGroup>
