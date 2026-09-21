@@ -1,4 +1,4 @@
-﻿[submodule "YukkuriMovieMaker.Generator"]
+[submodule "YukkuriMovieMaker.Generator"]
 	path = YukkuriMovieMaker.Generator
 	url = https://github.com/manju-summoner/YukkuriMovieMaker.Generator.git
 [submodule "YMM4-GitHubUpdateNotifier"]
