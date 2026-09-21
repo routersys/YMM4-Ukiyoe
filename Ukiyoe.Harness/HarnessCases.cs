@@ -48,13 +48,14 @@ internal static class HarnessCases
 
     public static IEnumerable<(string Name, UkiyoeEffect Effect)> Benchmarks()
     {
+        yield return ("quality-balanced", Create(effect => effect.Quality = UkiyoeQuality.Balanced));
         yield return ("default", Create());
         yield return ("quality-ultra", Create(effect => effect.Quality = UkiyoeQuality.Ultra));
         yield return ("flatten-100", Create(effect => effect.Flatten.Values[0].Value = 100));
         yield return ("amount-0", Create(effect => effect.Amount.Values[0].Value = 0));
     }
 
-    static UkiyoeEffect Create(Action<UkiyoeEffect>? configure = null)
+    public static UkiyoeEffect Create(Action<UkiyoeEffect>? configure = null)
     {
         var effect = new UkiyoeEffect();
         configure?.Invoke(effect);

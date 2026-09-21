@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Packaging;
 using System.Security.Cryptography;
+using ComputeWeave;
+using Ukiyoe;
 using Ukiyoe.Harness;
 using SharpGen.Runtime;
 
@@ -29,6 +32,12 @@ try
 {
     if (arguments.Mode == HarnessMode.Compare)
         return Compare(arguments.Before!, arguments.After!);
+
+    if (arguments.Mode == HarnessMode.Structure)
+    {
+        var structureImage = arguments.Input is { } structureInput ? HarnessImage.Load(structureInput) : HarnessImage.Synthetic(CanvasWidth, CanvasHeight);
+        return Structure(structureImage);
+    }
 
     var outputDirectory = arguments.OutputDirectory ?? Path.Combine(AppContext.BaseDirectory, "harness-output");
     if (arguments.Mode == HarnessMode.Benchmark)
@@ -202,6 +211,111 @@ static int Transition(HarnessRenderer renderer, string outputDirectory)
     }
 
     return failures == 0 ? 0 : 1;
+}
+
+static int Structure(HarnessImage image)
+{
+    const int Rounds = 12;
+    const int Seed = 17;
+    const int RectFrames = 20;
+
+    using var pipeline = UkiyoePipeline.TryCreate();
+    if (pipeline is null)
+        throw new HarnessException("Direct3D 12を利用できません。");
+
+    var device = GraphicsDevice.GetDefault();
+    using var sourceTexture = device.AllocateReadWriteTexture2D<Bgra32, Float4>(image.Width, image.Height);
+    var pixels = new Bgra32[image.Width * image.Height];
+    for (var index = 0; index < pixels.Length; index++)
+    {
+        var offset = index * HarnessImage.BytesPerPixel;
+        pixels[index] = new Bgra32(image.Pixels[offset + 2], image.Pixels[offset + 1], image.Pixels[offset], image.Pixels[offset + 3]);
+    }
+    sourceTexture.CopyFrom(pixels);
+
+    var parameters = new UkiyoePipeline.Parameters(UkiyoeQuality.High, 0.5f, 0.5f, 0.5f, 0.6f, 6, 0.3f, 0.4f, 0.5f, 0.85f, 0.12f, 0.1f, 0.09f, 0);
+    pipeline.Simulate(sourceTexture, image.Width, image.Height, 0, 0, image.Width, image.Height, in parameters);
+    pipeline.WaitForCompletion();
+    var stopwatch = new Stopwatch();
+
+    var variants = new (string Name, Func<bool, UkiyoePipeline.Parameters> Make)[]
+    {
+        ("cached", _ => parameters),
+        ("flatten", flip => parameters with { Flatten = flip ? 0.70f : 0.60f }),
+        ("lineWidth", flip => parameters with { LineWidth = flip ? 0.60f : 0.50f }),
+        ("coherence", flip => parameters with { Coherence = flip ? 0.60f : 0.50f }),
+        ("lineDetail", flip => parameters with { LineDetail = flip ? 0.60f : 0.50f }),
+        ("all", flip => parameters with
+        {
+            Flatten = flip ? 0.70f : 0.60f,
+            LineWidth = flip ? 0.60f : 0.50f,
+            Coherence = flip ? 0.60f : 0.50f,
+            LineDetail = flip ? 0.60f : 0.50f,
+        }),
+    };
+
+    var samples = new List<double>[variants.Length];
+    for (var index = 0; index < samples.Length; index++)
+        samples[index] = new List<double>(Rounds);
+
+    foreach (var (_, make) in variants)
+    {
+        var warmup = make(true);
+        pipeline.Simulate(sourceTexture, image.Width, image.Height, 0, 0, image.Width, image.Height, in warmup);
+        pipeline.WaitForCompletion();
+    }
+
+    var order = Enumerable.Range(0, variants.Length).ToArray();
+    var random = new Random(Seed);
+    for (var round = 0; round < Rounds; round++)
+    {
+        for (var index = order.Length - 1; index > 0; index--)
+        {
+            var swap = random.Next(index + 1);
+            (order[index], order[swap]) = (order[swap], order[index]);
+        }
+
+        foreach (var index in order)
+        {
+            var settled = variants[index].Make(false);
+            pipeline.Simulate(sourceTexture, image.Width, image.Height, 0, 0, image.Width, image.Height, in settled);
+            pipeline.WaitForCompletion();
+
+            var measured = variants[index].Make(true);
+            stopwatch.Restart();
+            pipeline.Simulate(sourceTexture, image.Width, image.Height, 0, 0, image.Width, image.Height, in measured);
+            pipeline.WaitForCompletion();
+            stopwatch.Stop();
+            samples[index].Add(stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    Console.WriteLine($"structure recompute over {Rounds} interleaved rounds (ms)");
+    for (var index = 0; index < variants.Length; index++)
+    {
+        var sorted = samples[index].OrderBy(static value => value).ToArray();
+        var median = sorted[sorted.Length / 2];
+        Console.WriteLine($"  {variants[index].Name,-11} min={sorted[0],7:F2}  median={median,7:F2}  max={sorted[^1],7:F2}");
+    }
+
+    if (pipeline.TryGetVisibleBounds(image.Width, image.Height, in parameters, out var rect))
+    {
+        using var rectOutput = device.AllocateReadWriteTexture2D<Bgra32, Float4>(rect.Width, rect.Height);
+        pipeline.RenderVisible(rectOutput, image.Width, image.Height, rect, in parameters);
+        pipeline.WaitForCompletion();
+        stopwatch.Restart();
+        for (var frame = 0; frame < RectFrames; frame++)
+        {
+            pipeline.Simulate(sourceTexture, image.Width, image.Height, 0, 0, image.Width, image.Height, in parameters);
+            pipeline.TryGetVisibleBounds(image.Width, image.Height, in parameters, out rect);
+            pipeline.RenderVisible(rectOutput, image.Width, image.Height, rect, in parameters);
+        }
+        pipeline.WaitForCompletion();
+        stopwatch.Stop();
+        Console.WriteLine($"cached frame with rect {rect.Width}x{rect.Height} at ({rect.X},{rect.Y}): {stopwatch.Elapsed.TotalMilliseconds / RectFrames:F2} ms/frame");
+    }
+
+    return 0;
 }
 
 static int Compare(string beforeDirectory, string afterDirectory)
