@@ -158,6 +158,7 @@ jobs:
           $code       = [char]0x60
           $fence      = [string]::new($code, 3)
           $unit       = [char]0x1f
+          $record     = [char]0x1e
 
           $previous = ""
           $candidates = @(git tag --list "v*" --merged $tag --sort=-creatordate | Where-Object { $_ -ne $tag })
@@ -167,23 +168,39 @@ jobs:
           Write-Host "直前のタグ: $previous"
 
           $range = if ($previous) { "$previous..$tag" } else { $tag }
-          $log = @(git log "--format=%H%x1f%s%x1f%an%x1f%ad" --date=short $range)
+          $log = (@(git log "--format=%H%x1f%s%x1f%an%x1f%ad%x1f%b%x1e" --date=short $range) -join "`n") -split $record
 
           $commits = @()
-          foreach ($line in $log) {
-            if (-not $line) { continue }
-            $fields = $line -split $unit
-            if ($fields.Count -lt 4) { continue }
+          foreach ($entry in $log) {
+            if (-not $entry.Trim()) { continue }
+            $fields = $entry.TrimStart("`n") -split $unit
+            if ($fields.Count -lt 5) { continue }
             $commits += [pscustomobject]@{
               Sha     = $fields[0]
               Subject = $fields[1]
               Name    = $fields[2]
               Date    = $fields[3]
+              Body    = $fields[4]
               Login   = ""
               Avatar  = ""
             }
           }
           Write-Host "コミット数: $($commits.Count)"
+
+          $categories = [ordered]@{
+            A = @{ Title = "追加"; Symbol = "+"; Items = [System.Collections.Generic.List[pscustomobject]]::new() }
+            M = @{ Title = "変更"; Symbol = "~"; Items = [System.Collections.Generic.List[pscustomobject]]::new() }
+            D = @{ Title = "削除"; Symbol = "-"; Items = [System.Collections.Generic.List[pscustomobject]]::new() }
+            F = @{ Title = "修正"; Symbol = "!"; Items = [System.Collections.Generic.List[pscustomobject]]::new() }
+          }
+          foreach ($commit in $commits) {
+            if (-not $commit.Body) { continue }
+            foreach ($bodyLine in ($commit.Body -split "`n")) {
+              $trimmed = $bodyLine.Trim()
+              if ($trimmed -notmatch '^・(.+)-([AMDF])$') { continue }
+              $categories[$Matches[2]].Items.Add([pscustomobject]@{ Text = $Matches[1]; Sha = $commit.Sha })
+            }
+          }
 
           $pending = [System.Collections.Generic.HashSet[string]]::new()
           foreach ($commit in $commits) {
@@ -262,6 +279,23 @@ jobs:
           $body.Add("| 変更されたファイル | $changedFiles |")
           $body.Add("| 追加された行 | $insertions |")
           $body.Add("| 削除された行 | $deletions |")
+
+          $hasHighlights = ($categories.Values | ForEach-Object { $_.Items.Count } | Measure-Object -Sum).Sum -gt 0
+          if ($hasHighlights) {
+            $body.Add("")
+            $body.Add("## 主な変更")
+            foreach ($key in $categories.Keys) {
+              $category = $categories[$key]
+              if ($category.Items.Count -eq 0) { continue }
+              $body.Add("")
+              $body.Add("### [$($category.Symbol)] $($category.Title)")
+              $body.Add("")
+              foreach ($item in $category.Items) {
+                $short = $item.Sha.Substring(0, 7)
+                $body.Add("- $($item.Text) ([$code$short$code]($server/$repository/commit/$($item.Sha)))")
+              }
+            }
+          }
 
           $body.Add("")
           $body.Add("## ダウンロード")
