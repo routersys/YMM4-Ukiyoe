@@ -42,6 +42,19 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
     public override DrawDescription Update(EffectDescription effectDescription)
     {
+        try
+        {
+            return UpdateCore(effectDescription);
+        }
+        catch (Exception exception)
+        {
+            UkiyoeTelemetry.Report(exception);
+            throw;
+        }
+    }
+
+    private DrawDescription UpdateCore(EffectDescription effectDescription)
+    {
         if (IsPassThroughEffect || _effect is null || _outputCrop is null || _outputTransform is null || _outputTransformOutput is null || _resourceSet is null || _interopProvider is null || _pipeline is null || input is null)
             return effectDescription.DrawDescription;
 
@@ -297,8 +310,9 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             _resourceSet = UkiyoeResourceSet.Create(interopDevice, _interopDomain);
             _pipeline = UkiyoePipeline.TryCreate(interopDevice);
         }
-        catch
+        catch (Exception exception)
         {
+            UkiyoeTelemetry.Report(exception);
             ReleaseInterop();
             throw;
         }
@@ -346,8 +360,9 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             disposer.Collect(output);
             return output;
         }
-        catch
+        catch (Exception exception)
         {
+            UkiyoeTelemetry.Report(exception);
             output?.Dispose();
             outputTransformOutput?.Dispose();
             outputTransform?.Dispose();
@@ -367,6 +382,19 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
     }
 
     protected override void ClearEffectChain()
+    {
+        try
+        {
+            ClearEffectChainCore();
+        }
+        catch (Exception exception)
+        {
+            UkiyoeTelemetry.Report(exception);
+            throw;
+        }
+    }
+
+    private void ClearEffectChainCore()
     {
         _effect?.SetInput(0, null, true);
         _effect?.SetInput(1, null, true);

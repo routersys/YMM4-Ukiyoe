@@ -97,7 +97,17 @@ public sealed class UkiyoeEffect : VideoEffectBase
     public override IEnumerable<string> CreateExoVideoFilters(int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
 
     public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
-        => new UkiyoeEffectProcessor(devices, this);
+    {
+        try
+        {
+            return new UkiyoeEffectProcessor(devices, this);
+        }
+        catch (Exception exception)
+        {
+            UkiyoeTelemetry.Report(exception);
+            throw;
+        }
+    }
 
     protected override IEnumerable<IAnimatable> GetAnimatables()
         => _animatables ??= [Amount, LineWidth, Coherence, LineDetail, LineStrength, Flatten, Misregistration, Baren, Paper];

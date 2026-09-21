@@ -33,7 +33,18 @@ internal sealed class UkiyoeCustomEffect(IGraphicsDevicesAndContext devices)
 
         protected override void UpdateConstants()
         {
-            drawInformation?.SetPixelShaderConstantBuffer(_cb);
+            if (drawInformation is null)
+                return;
+
+            try
+            {
+                drawInformation.SetPixelShaderConstantBuffer(_cb);
+            }
+            catch (Exception exception)
+            {
+                UkiyoeTelemetry.Report(exception);
+                throw;
+            }
         }
 
         public override void MapInputRectsToOutputRect(
