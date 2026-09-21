@@ -275,8 +275,8 @@ internal sealed partial class UkiyoePipelineHost
     {
         context.For(gridWidth, gridHeight, new CopyColorShader(grid.ColorIn, grid.ColorA, gridWidth, gridHeight));
         context.Barrier(grid.ColorA);
-        var flattenDispatchWidth = (gridWidth + UkiyoeSettings.FlattenGroupDim - 1) & ~(UkiyoeSettings.FlattenGroupDim - 1);
-        var flattenDispatchHeight = (gridHeight + UkiyoeSettings.FlattenGroupDim - 1) & ~(UkiyoeSettings.FlattenGroupDim - 1);
+        var flattenDispatchWidth = ThreadGroupAlignment.AlignX<FlattenShader>(gridWidth);
+        var flattenDispatchHeight = ThreadGroupAlignment.AlignY<FlattenShader>(gridHeight);
         var iterateIn = grid.ColorA;
         var iterateOut = grid.ColorB;
         for (var iteration = 0; iteration < derived.FlattenIterations; iteration++)
