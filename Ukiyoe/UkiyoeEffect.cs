@@ -16,6 +16,7 @@ public sealed class UkiyoeEffect : VideoEffectBase
 
     public UkiyoeEffect()
     {
+        UkiyoeTelemetry.EnsureStartedOnce();
         UkiyoeUpdateNotifier.EnsureCheckedOnce();
     }
 
