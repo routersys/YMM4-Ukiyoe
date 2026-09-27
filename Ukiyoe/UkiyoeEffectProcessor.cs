@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Numerics;
 using ComputeWeave;
 using Vortice.Direct2D1;
@@ -309,6 +310,11 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             _interopDomain = interopDevice.RegisterExternalDomain(interopProvider);
             _resourceSet = UkiyoeResourceSet.Create(interopDevice, _interopDomain);
             _pipeline = UkiyoePipeline.TryCreate(interopDevice);
+        }
+        catch (Win32Exception)
+        {
+            ReleaseInterop();
+            return null;
         }
         catch
         {
