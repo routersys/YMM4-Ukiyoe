@@ -68,6 +68,13 @@ public sealed class UkiyoeEffectProcessorTests
         { nameof(UkiyoeEffect.Seed), effect => effect.Seed = 1 },
     };
 
+    public static readonly TheoryData<string, Action<UkiyoeEffect>> ReachChanges = new()
+    {
+        { nameof(UkiyoeEffect.Misregistration), effect => effect.Misregistration.Values[0].Value = 40d },
+        { nameof(UkiyoeEffect.LineWidth), effect => effect.LineWidth.Values[0].Value = 60d },
+        { nameof(UkiyoeEffect.Coherence), effect => effect.Coherence.Values[0].Value = 60d },
+    };
+
     [Fact]
     public void TheProcessorHandsTheDrawDescriptionBackUnchanged()
     {
@@ -210,6 +217,29 @@ public sealed class UkiyoeEffectProcessorTests
         var after = RenderFrame(context, processor, 0);
 
         Assert.False(before.SamePixelsAs(after), setting);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReachChanges))]
+    public void ChangingHowFarThePrintReachesKeepsTheInsideOfAFlatColor(string setting, Action<UkiyoeEffect> change)
+    {
+        using var devices = new GraphicsDevices();
+        using var context = devices.CreateContext();
+        RequireInterop(context);
+        using var source = SourceImage.Solid(context, Size, Size, Bgra.Opaque(96, 128, 192));
+        var effect = new UkiyoeEffect();
+        effect.Baren.Values[0].Value = 100d;
+        effect.Paper.Values[0].Value = 100d;
+        using var processor = effect.CreateVideoEffect(context);
+        processor.SetInput(source.Bitmap);
+
+        var before = RenderFrame(context, processor, 0);
+        change(effect);
+        var after = RenderFrame(context, processor, 0);
+
+        Assert.All(
+            before.Coordinates().Where(point => point.X is >= Start and < End && point.Y is >= Start and < End),
+            point => Assert.True(before[point.X, point.Y] == after[point.X, point.Y], $"{setting} ({point.X}, {point.Y})"));
     }
 
     [Theory]
