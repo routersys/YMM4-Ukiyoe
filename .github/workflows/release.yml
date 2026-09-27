@@ -103,6 +103,26 @@ jobs:
             -p:Platform=x64 `
             -p:SkipPluginDeploy=true
 
+      - name: テストプロジェクトのビルド
+        shell: pwsh
+        run: |
+          dotnet build Ukiyoe.Tests/Ukiyoe.Tests.csproj `
+            -c Release `
+            -p:YMM4DirPath="${{ steps.ymm4.outputs.YMM4_DIR }}" `
+            -p:Platform=x64 `
+            -p:SkipPluginDeploy=true `
+            -maxcpucount:1
+
+      - name: テストの実行
+        shell: pwsh
+        run: |
+          dotnet test Ukiyoe.Tests/Ukiyoe.Tests.csproj `
+            --no-build `
+            --no-restore `
+            -c Release `
+            -p:Platform=x64 `
+            -p:SkipPluginDeploy=true
+
       - name: パッケージの作成
         id: package
         shell: pwsh
