@@ -105,9 +105,9 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         var quality = UkiyoeSettings.GetQuality(parameters.Quality);
         var cellEstimate = (float)Math.Max((longSide + 128d) / quality.GridResolution, 1d);
         var margin = UkiyoeSettings.GetMargin(
-            UkiyoeSettings.GetShiftPixels(Math.Clamp(parameters.Misregistration, 0f, 1f)),
-            UkiyoeSettings.GetLineSigmaPixels(Math.Clamp(parameters.LineWidth, 0f, 1f)),
-            UkiyoeSettings.GetFlowSigma(Math.Clamp(parameters.Coherence, 0f, 1f)),
+            UkiyoeSettings.MaximumShiftPixels,
+            UkiyoeSettings.MaximumLineSigmaPixels,
+            UkiyoeSettings.MaximumFlowSigma,
             cellEstimate);
         if (marginLimit < margin)
         {
