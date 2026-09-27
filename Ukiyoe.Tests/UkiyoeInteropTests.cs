@@ -134,4 +134,34 @@ public sealed class UkiyoeInteropTests
         Assert.Equal((1920, 1080), (secondWidth, secondHeight));
         Assert.True(LitPixels(output, second) > 0);
     }
+
+    [Fact]
+    public void APrintIsDrawnAfterTheSourceIsReplacedByALargerOne()
+    {
+        using var devices = new GraphicsDevices();
+        using var context = devices.CreateContext();
+        using var interop = Interop.Create(context);
+        var parameters = Parameters();
+        var previous = default(UkiyoePipeline.PixelRect);
+        var previousArea = 0;
+
+        foreach (var (size, square) in new[] { (96, 32), (128, 64) })
+        {
+            using var source = new SourceImage(context, size, size, CenteredSquare(size, square));
+            Assert.True(interop.Resources.TryEnsureSource(size, size, out var sourceChanged));
+            interop.Draw(source.Bitmap);
+            Assert.True(interop.Pipeline.Simulate(interop.Resources.GetSourceComputeBinding(), size, size, 0, 0, size, size, in parameters));
+            Assert.True(interop.Pipeline.TryGetVisibleBounds(size, size, in parameters, out var visible));
+            Assert.True(interop.Resources.TryEnsureOutput(visible.Width, visible.Height, out _));
+            interop.Pipeline.RenderVisible(interop.Resources.GetOutputComputeBinding(), size, size, visible, in parameters);
+            var output = interop.CaptureOutput(context, out var width, out var height);
+
+            Assert.True(sourceChanged);
+            Assert.True(visible.Width > previous.Width && visible.Height > previous.Height);
+            Assert.Equal((visible.Width, visible.Height), (width, height));
+            Assert.True(LitPixels(output, visible) > previousArea);
+            previous = visible;
+            previousArea = square * square;
+        }
+    }
 }
