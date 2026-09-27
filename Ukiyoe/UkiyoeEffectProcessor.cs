@@ -310,9 +310,8 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             _resourceSet = UkiyoeResourceSet.Create(interopDevice, _interopDomain);
             _pipeline = UkiyoePipeline.TryCreate(interopDevice);
         }
-        catch (Exception exception)
+        catch
         {
-            UkiyoeTelemetry.Report(exception);
             ReleaseInterop();
             throw;
         }
@@ -360,9 +359,8 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             disposer.Collect(output);
             return output;
         }
-        catch (Exception exception)
+        catch
         {
-            UkiyoeTelemetry.Report(exception);
             output?.Dispose();
             outputTransformOutput?.Dispose();
             outputTransform?.Dispose();
@@ -376,16 +374,9 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
     protected override void setInput(ID2D1Image? inputImage)
     {
-        _effect?.SetInput(0, inputImage, true);
-        if (!_hasOutput)
-            _effect?.SetInput(1, inputImage, true);
-    }
-
-    protected override void ClearEffectChain()
-    {
         try
         {
-            ClearEffectChainCore();
+            SetInputCore(inputImage);
         }
         catch (Exception exception)
         {
@@ -394,7 +385,14 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         }
     }
 
-    private void ClearEffectChainCore()
+    private void SetInputCore(ID2D1Image? inputImage)
+    {
+        _effect?.SetInput(0, inputImage, true);
+        if (!_hasOutput)
+            _effect?.SetInput(1, inputImage, true);
+    }
+
+    protected override void ClearEffectChain()
     {
         _effect?.SetInput(0, null, true);
         _effect?.SetInput(1, null, true);
@@ -415,6 +413,11 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
                 ClearEffectChain();
                 ReleaseInterop();
             }
+        }
+        catch (Exception exception)
+        {
+            UkiyoeTelemetry.Report(exception);
+            throw;
         }
         finally
         {
