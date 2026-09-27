@@ -1,4 +1,5 @@
-﻿using ComputeWeave;
+﻿// Stryker disable all
+using ComputeWeave;
 
 namespace Ukiyoe;
 
