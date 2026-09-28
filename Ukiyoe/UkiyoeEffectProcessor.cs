@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Numerics;
 using ComputeWeave;
 using Vortice.Direct2D1;
@@ -104,9 +105,9 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         var quality = UkiyoeSettings.GetQuality(parameters.Quality);
         var cellEstimate = (float)Math.Max((longSide + 128d) / quality.GridResolution, 1d);
         var margin = UkiyoeSettings.GetMargin(
-            UkiyoeSettings.GetShiftPixels(Math.Clamp(parameters.Misregistration, 0f, 1f)),
-            UkiyoeSettings.GetLineSigmaPixels(Math.Clamp(parameters.LineWidth, 0f, 1f)),
-            UkiyoeSettings.GetFlowSigma(Math.Clamp(parameters.Coherence, 0f, 1f)),
+            UkiyoeSettings.MaximumShiftPixels,
+            UkiyoeSettings.MaximumLineSigmaPixels,
+            UkiyoeSettings.MaximumFlowSigma,
             cellEstimate);
         if (marginLimit < margin)
         {
@@ -310,9 +311,13 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             _resourceSet = UkiyoeResourceSet.Create(interopDevice, _interopDomain);
             _pipeline = UkiyoePipeline.TryCreate(interopDevice);
         }
-        catch (Exception exception)
+        catch (Win32Exception)
         {
-            UkiyoeTelemetry.Report(exception);
+            ReleaseInterop();
+            return null;
+        }
+        catch
+        {
             ReleaseInterop();
             throw;
         }
@@ -360,9 +365,8 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
             disposer.Collect(output);
             return output;
         }
-        catch (Exception exception)
+        catch
         {
-            UkiyoeTelemetry.Report(exception);
             output?.Dispose();
             outputTransformOutput?.Dispose();
             outputTransform?.Dispose();
@@ -376,16 +380,9 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
 
     protected override void setInput(ID2D1Image? inputImage)
     {
-        _effect?.SetInput(0, inputImage, true);
-        if (!_hasOutput)
-            _effect?.SetInput(1, inputImage, true);
-    }
-
-    protected override void ClearEffectChain()
-    {
         try
         {
-            ClearEffectChainCore();
+            SetInputCore(inputImage);
         }
         catch (Exception exception)
         {
@@ -394,7 +391,14 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
         }
     }
 
-    private void ClearEffectChainCore()
+    private void SetInputCore(ID2D1Image? inputImage)
+    {
+        _effect?.SetInput(0, inputImage, true);
+        if (!_hasOutput)
+            _effect?.SetInput(1, inputImage, true);
+    }
+
+    protected override void ClearEffectChain()
     {
         _effect?.SetInput(0, null, true);
         _effect?.SetInput(1, null, true);
@@ -415,6 +419,11 @@ internal sealed class UkiyoeEffectProcessor : VideoEffectProcessorBase
                 ClearEffectChain();
                 ReleaseInterop();
             }
+        }
+        catch (Exception exception)
+        {
+            UkiyoeTelemetry.Report(exception);
+            throw;
         }
         finally
         {

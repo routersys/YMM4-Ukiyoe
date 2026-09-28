@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using ComputeWeave;
 
@@ -50,13 +51,18 @@ internal sealed class UkiyoePipeline : IDisposable
         try
         {
             host = UkiyoePipelineHost.Create(device, UkiyoeSettings.MaximumPendingSubmissions);
-            return new UkiyoePipeline(device, host);
+            var pipeline = new UkiyoePipeline(device, host);
+            host = null;
+            return pipeline;
         }
-        catch
+        catch (Win32Exception)
+        {
+            return null;
+        }
+        finally
         {
             host?.Dispose();
             host?.WaitForDisposal();
-            return null;
         }
     }
 
