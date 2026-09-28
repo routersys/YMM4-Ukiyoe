@@ -3,13 +3,14 @@
 ========================================
 YukkuriMovieMaker4上で動作する、素材を浮世絵の多色木版画とみなして
 描画する映像エフェクトプラグインです。
-輪郭主線はKangらの論文「Coherent Line Drawing」（NPAR 2007）の
-エッジ接線流と流れに沿った差分ガウスに基づきます。
-地色はBiらの論文「An L1 Image Transform for Edge-Preserving Smoothing
-and Scene-Level Intrinsic Decomposition」（SIGGRAPH 2015）の
-L1局所平坦化を前向きの反復重み付き最小二乗として解いて均します。
-限定パレットの階調化はWinnemöllerらの「Real-Time Video Abstraction」
-（SIGGRAPH 2006）の軟量子化に基づきます。
+輪郭主線はKang, Lee and Chuiの論文「Coherent line drawing」
+（NPAR 2007、2007年）のエッジ接線流と流れに沿った差分ガウスに基づきます。
+地色はBi, Han and Yuの論文「An L1 image transform for edge-preserving
+smoothing and scene-level intrinsic decomposition」（ACM Transactions on
+Graphics、2015年）のL1局所平坦化を前向きの反復重み付き最小二乗として
+解いて均します。
+限定パレットの階調化はWinnemöller, Olsen and Goochの論文「Real-time video
+abstraction」（ACM Transactions on Graphics、2006年）の軟量子化に基づきます。
 和紙の繊維とばれん目と版ずれはシードから決定論的に決まり、
 同じ設定では常に同じ絵になります。
 強さ、線の太さ、線の流れ、線の量、線の濃さ、平坦化、版ずれ、
