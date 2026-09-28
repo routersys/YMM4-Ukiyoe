@@ -1,4 +1,4 @@
-﻿# 浮世絵 for YMM4
+# 浮世絵 for YMM4
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](#)
