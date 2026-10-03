@@ -264,6 +264,30 @@ public sealed class UkiyoeEffectProcessorTests
         Assert.Equal(secondSize > firstSize, after.Width > before.Width);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task AProcessorDrawsLikeAFreshOneAfterTheDeviceReclaimsIdleMemory()
+    {
+        await Task.Run(() =>
+        {
+            using var devices = new GraphicsDevices();
+            using var context = devices.CreateContext();
+            RequireInterop(context);
+            using var source = new SourceImage(context, Size, Size, (x, y) => x is >= 16 and < 48 && y is >= 16 and < 48 ? Bgra.Opaque(80, 200, 255) : Bgra.Transparent);
+            var effect = new UkiyoeEffect();
+            using var processor = effect.CreateVideoEffect(context);
+            processor.SetInput(source.Bitmap);
+            RenderFrame(context, processor, 0);
+            GraphicsDevice.GetDefault().TrimMemory();
+
+            var reclaimed = RenderFrame(context, processor, 0);
+            using var fresh = effect.CreateVideoEffect(context);
+            fresh.SetInput(source.Bitmap);
+            var expected = RenderFrame(context, fresh, 0);
+
+            Assert.True(reclaimed.SamePixelsAs(expected));
+        }, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public void AFailureWhileUpdatingIsNotSwallowed()
     {
