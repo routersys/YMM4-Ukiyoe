@@ -239,6 +239,22 @@ public sealed class UkiyoePipelineTests
     }
 
     [Fact]
+    public void APipelineWhoseGridWasReclaimedDrawsLikeAFreshOne()
+    {
+        using var pipeline = CreatePipeline();
+        using var fresh = CreatePipeline();
+        var source = Gradient(64, 64, 8, 8, 48, 48);
+        var parameters = Parameters();
+        Render(pipeline, source, 64, 64, parameters);
+        GraphicsDevice.GetDefault().TrimMemory();
+
+        var reused = Render(pipeline, source, 64, 64, parameters);
+        var expected = Render(fresh, source, 64, 64, parameters);
+
+        Assert.Equal(expected, reused);
+    }
+
+    [Fact]
     public void AWarmPipelineAllocatesNoManagedMemory()
     {
         using var pipeline = CreatePipeline();
