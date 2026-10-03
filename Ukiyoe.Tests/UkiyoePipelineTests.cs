@@ -255,6 +255,25 @@ public sealed class UkiyoePipelineTests
     }
 
     [Fact]
+    public void AReclaimedGridIsSimulatedAgain()
+    {
+        using var pipeline = CreatePipeline();
+        var parameters = Parameters();
+        var device = GraphicsDevice.GetDefault();
+        using var texture = device.AllocateReadWriteTexture2D<Bgra32, Float4>(64, 64);
+        Upload(texture, Gradient(64, 64, 8, 8, 48, 48));
+
+        var first = pipeline.Simulate(texture, 64, 64, 0, 0, 64, 64, in parameters);
+        var repeated = pipeline.Simulate(texture, 64, 64, 0, 0, 64, 64, in parameters);
+        device.TrimMemory();
+        var reclaimed = pipeline.Simulate(texture, 64, 64, 0, 0, 64, 64, in parameters);
+
+        Assert.True(first);
+        Assert.False(repeated);
+        Assert.True(reclaimed);
+    }
+
+    [Fact]
     public void AWarmPipelineAllocatesNoManagedMemory()
     {
         using var pipeline = CreatePipeline();
