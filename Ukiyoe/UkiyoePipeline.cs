@@ -274,15 +274,15 @@ internal sealed class UkiyoePipeline : IDisposable
 
     private void EnsureGrid(int gridWidth, int gridHeight)
     {
-        if (_gridWidth == gridWidth && _gridHeight == gridHeight)
-            return;
-
         var gridLength = gridWidth * gridHeight;
         if (!_host.TryEnsureGrid(
                 new UkiyoeGridResources.Plan(
                     gridLength, gridLength, gridLength, gridLength, gridLength, gridLength, gridLength, gridLength, gridLength),
-                out _))
+                out var changed))
             throw new InvalidOperationException();
+
+        if (!changed && _gridWidth == gridWidth && _gridHeight == gridHeight)
+            return;
 
         _cachedLitCount = 0;
         _cachedBoundsMinX = int.MaxValue;
